@@ -58,6 +58,8 @@ void ViscaUART::receive_datagram(const QByteArray &packet)
 void ViscaUART::receiveBytes(const QByteArray &msg)
 {
 	for (auto b : msg) {
+		if (rxbuffer.size() >= 65536)
+			rxbuffer.clear();
 		rxbuffer += b;
 		if ((b & 0xff) == 0xff) {
 			if (rxbuffer.size())

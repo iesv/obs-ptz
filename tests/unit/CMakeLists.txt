@@ -14,6 +14,7 @@ add_executable(
   main.cpp
   test_lifecycle.cpp
   test_ws_decl.cpp
+  test_pelco_checksum.cpp
   "${CMAKE_CURRENT_LIST_DIR}/../../src/core/ptz-lifecycle.hpp"
   "${CMAKE_CURRENT_LIST_DIR}/../../src/controller/ptz-ws-decl.cpp"
   "${CMAKE_CURRENT_LIST_DIR}/../../src/controller/ptz-ws-decl.hpp"

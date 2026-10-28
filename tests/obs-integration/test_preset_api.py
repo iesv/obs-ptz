@@ -28,6 +28,7 @@ ptzsim, the camera, has: a camera preset is in it, a local one is not.
 import base64
 import contextlib
 import json
+import os
 import time
 import urllib.request
 
@@ -662,6 +663,7 @@ def test_get_thumbnail_proc_returns_the_image(obs_world, made):
     uuid = obs_world.device_uuid(device)
 
     answer = obs_world.ws.vendor("obs-ptz", "ptz_preset_get_thumbnail", {"device": uuid, "id": preset_id})
+    assert os.path.isabs(thumbnail_of(obs_world, device, preset_id))
     with open(thumbnail_of(obs_world, device, preset_id), "rb") as f:
         assert base64.b64decode(answer["data"]) == f.read()
     assert answer["mime"] in ("image/jpeg", "image/png")

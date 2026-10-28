@@ -5,6 +5,12 @@ import urllib.request
 from conftest import SETTINGS_DIALOG
 from test_filter_devices import FilterPtzsim
 from test_soft_ptz import soft_cam
+from test_onvif_position import onvif_device
+
+
+def test_onvif_nonce_uses_base64_encoding(obs_world, onvif_device):
+    assert obs_world.state()["onvif_requests"] > 0
+    assert obs_world.state()["onvif_invalid_nonce_encodings"] == 0
 
 
 def test_a_hidden_settings_preview_releases_its_source(obs_world, soft_cam):

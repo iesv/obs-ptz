@@ -8,6 +8,7 @@ import zlib
 
 import psutil
 import pytest
+from test_onvif_position import onvif_device
 
 from test_soft_ptz import (FILTER_KIND, GREEN, RED, duplicating_studio_mode, move,
                           thumbnail_image, wait_for_corners, wait_for_position)
@@ -102,3 +103,26 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
         assert report["handle_growth"] < 64, report
     finally:
         obs_world.ws.call("RemoveInput", {"inputName": source})
+
+
+def test_onvif_request_soak(obs_world, onvif_device, tmp_path):
+    process = psutil.Process(obs_world.obs_process().pid)
+    samples = []
+    started = time.monotonic()
+    count = obs_world.state()["onvif_requests"]
+    for batch in range(12):
+        for _ in range(100):
+            obs_world.call_proc(onvif_device, "ptz_preset_refresh")
+        count += 100
+        obs_world.wait_for(lambda: obs_world.state()["onvif_requests"] >= count, timeout=30)
+        time.sleep(0.25)
+        samples.append(process.memory_info().rss)
+    report = {
+        "kind": "onvif", "requests_sent": 1200, "duration_seconds": time.monotonic() - started,
+        "rss_growth_bytes": statistics.median(samples[-3:]) - statistics.median(samples[2:5]),
+        "samples": samples,
+    }
+    (tmp_path / "stress-metrics.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(json.dumps(report))
+    assert report["rss_growth_bytes"] < 32 * 1024 * 1024, report
+    assert obs_world.state()["onvif_invalid_nonce_encodings"] == 0

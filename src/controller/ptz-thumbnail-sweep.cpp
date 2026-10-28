@@ -43,7 +43,7 @@ static void sweepThumbnails(QString thumbnailDir, QString configDir)
 		blog(LOG_INFO, "[obs-ptz] thumbnail sweep skipped: can't find the scene collections");
 		return;
 	}
-	sources.append(QFileInfo(QDir(configDir).filePath("config.json")));
+	sources.append(QDir(configDir).entryInfoList({"config.json*", "device-backups.json*"}, QDir::Files));
 
 	QByteArray text;
 	for (const QFileInfo &info : sources) {

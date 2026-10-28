@@ -27,7 +27,7 @@ QString ptz_thumbnail_dir()
 		return QString();
 	QString dir = QString::fromUtf8(path);
 	bfree(path);
-	return dir;
+	return QDir(dir).absolutePath();
 }
 
 QString ptz_thumbnail_path(const QString &fileName)

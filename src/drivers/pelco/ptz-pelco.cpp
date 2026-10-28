@@ -7,6 +7,7 @@
  */
 
 #include "ptz-pelco.hpp"
+#include "pelco-protocol.hpp"
 #include "ptz.h"
 
 const QByteArray HOME = QByteArray::fromHex("0007002B");
@@ -65,19 +66,7 @@ void PTZPelco::attach_interface(PelcoUART *new_iface)
 
 char PTZPelco::checkSum(QByteArray &data)
 {
-	int sum = 0x00;
-	if (use_pelco_d) {
-		/* Pelco-D checksum */
-		for (char c : data)
-			sum += c;
-		sum = sum % 100;
-	} else {
-		/* Pelco-P checksum */
-		for (char c : data)
-			sum ^= c;
-	}
-
-	return sum & 0xff;
+	return static_cast<char>(pelco_checksum(data.constData(), static_cast<size_t>(data.size()), use_pelco_d));
 }
 
 void PTZPelco::receive(const QByteArray &msg)
@@ -150,6 +139,7 @@ void PTZPelco::defaults(obs_data_t *config)
 	obs_data_set_default_int(config, "preset_max", 16);
 	obs_data_set_default_bool(config, "use_pelco_d", false);
 	obs_data_set_default_int(config, "baud_rate", 9600);
+	obs_data_set_default_int(config, "address", 1);
 }
 
 void PTZPelco::update(OBSData config)
