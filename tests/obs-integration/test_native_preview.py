@@ -42,16 +42,19 @@ def test_native_text_preview_after_preset_capture_and_surface_recreation(obs_wor
     path = [SETTINGS_DIALOG, "sourcePreview"]
 
     def frame(label):
+        pixels = {}
+
         def sample():
             try:
-                return obs_world.ui.call("native_display", path=path)
+                pixels.update(obs_world.ui.call("native_display", path=path))
+                return True
             except UiDriverError as exc:
                 if exc.code != "no_frame":
                     raise
                 measurements.append({"phase": label, "error": str(exc)})
                 return None
 
-        pixels = obs_world.wait_for(sample, timeout=6)
+        obs_world.wait_for(sample, timeout=6)
         measurements.append({"phase": label, **pixels})
         assert pixels["dark"] > 0.05, pixels
         assert 0.005 < pixels["white"] < 0.8, pixels
