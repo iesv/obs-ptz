@@ -20,6 +20,7 @@ import zlib
 
 import psutil
 import pytest
+from obsws import ObsWebSocketError
 from test_onvif_position import onvif_device
 
 from test_soft_ptz import (FILTER_KIND, GREEN, RED, duplicating_studio_mode, move,
@@ -117,7 +118,23 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
                     "GetSourceScreenshot", {"sourceName": copy, "imageFormat": "png"}))
                 obs_world.call_proc(copy, "ptz_preset_delete", {"id": preset})
                 assert thumbnail_image(obs_world, source, preset)
+                item = obs_world.ws.call("GetSceneItemId", {
+                    "sceneName": other_scene, "sourceName": copy,
+                })["sceneItemId"]
                 obs_world.ws.call("RemoveInput", {"inputName": copy})
+                # OBS marks an input removed before it prunes scene items.
+                # A minimized/headless scene may not render, so that pruning
+                # can be delayed indefinitely. Explicitly release the scene
+                # reference created by this test: otherwise this measures
+                # intentionally retained OBS inputs, including unfiltered
+                # images, instead of the filter's destruction/resource use.
+                try:
+                    obs_world.ws.call("RemoveSceneItem", {"sceneName": other_scene, "sceneItemId": item})
+                except ObsWebSocketError as exc:
+                    # A rendered scene may have pruned it between requests.
+                    # Only ResourceNotFound is an expected, successful cleanup.
+                    if exc.status.get("code") != 600:
+                        raise
                 try:
                     obs_world.wait_for(lambda: devices() == expected_devices)
                 except AssertionError:
