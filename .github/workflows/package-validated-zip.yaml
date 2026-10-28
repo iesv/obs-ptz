@@ -1,5 +1,10 @@
 name: Package validated Windows ZIP
 on:
+  # Bootstrap this workflow on a fork's repair branch without changing main.
+  # Subsequent normal source pushes continue to use the full build workflow.
+  push:
+    branches: [fix/soft-ptz-windows]
+    paths: [.github/workflows/package-validated-zip.yaml]
   workflow_dispatch:
     inputs:
       validated_run:
@@ -23,7 +28,7 @@ jobs:
       - name: Validate and reuse the tested binary
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_RUN: ${{ inputs.validated_run }}
+          SOURCE_RUN: ${{ inputs.validated_run || '40732058867' }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_RUN -notmatch '^\d+$') { throw 'Invalid run id' }
