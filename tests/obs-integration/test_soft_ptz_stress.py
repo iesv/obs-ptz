@@ -23,7 +23,7 @@ import pytest
 from test_onvif_position import onvif_device
 
 from test_soft_ptz import (FILTER_KIND, GREEN, RED, duplicating_studio_mode, move,
-                          thumbnail_image, wait_for_corners, wait_for_position)
+                          screenshot, thumbnail_image, wait_for_corners, wait_for_position)
 
 pytestmark = pytest.mark.skipif(os.environ.get("PTZ_STRESS") != "1", reason="opt-in stress test")
 
@@ -87,6 +87,12 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
             wait_for_position(obs_world, source, tmp_path, pan=pan, tilt=0.0, zoom=1.0)
             if kind == "image":
                 wait_for_corners(obs_world, source, dict.fromkeys(("tl", "tr", "bl", "br"), GREEN if pan > 0 else RED))
+            else:
+                def text_is_visible():
+                    width, height, pixel = screenshot(obs_world, source)
+                    return any(max(pixel(x, y)) > 32 for y in range(height) for x in range(width))
+
+                obs_world.wait_for(text_is_visible)
             preset = obs_world.create_preset(source, str(index), store="local")
             obs_world.wait_for(lambda: thumbnail_image(obs_world, source, preset))
             presets.append(preset)
@@ -95,11 +101,20 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
                 obs_world.call_proc(source, "ptz_preset_delete", {"id": presets.pop(0)})
             assert all(thumbnail_image(obs_world, source, p) for p in presets)
             if index % 5 == 0:
-                copy = source + "-copy"
+                # OBS may retain the previous deleted input through a
+                # transition. Give each new input a unique name so OBS's
+                # automatic collision suffix cannot change our lookup key.
+                copy = f"{source}-copy-{index}"
                 obs_world.ui.call("duplicate_source", name=source, copy=copy, scene=other_scene)
                 obs_world.wait_for(lambda: obs_world.device_uuid(copy))
                 assert thumbnail_image(obs_world, copy, preset)
-                obs_world.ws.call("GetSourceScreenshot", {"sourceName": copy, "imageFormat": "png"})
+                # Native text sources initialize their texture on a later
+                # video tick. A copied preset thumbnail is inherited and does
+                # not establish that the new input has rendered its first
+                # frame yet. Require a real screenshot within a bounded wait;
+                # a persistent render failure still fails the stress test.
+                obs_world.wait_for(lambda: obs_world.ws.call(
+                    "GetSourceScreenshot", {"sourceName": copy, "imageFormat": "png"}))
                 obs_world.call_proc(copy, "ptz_preset_delete", {"id": preset})
                 assert thumbnail_image(obs_world, source, preset)
                 obs_world.ws.call("RemoveInput", {"inputName": copy})
