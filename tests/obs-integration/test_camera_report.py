@@ -126,7 +126,10 @@ def test_the_dialog_shows_the_report_to_save_copy_or_send(request, obs_world, tm
     sim, _, device_name = camera(request, obs_world, tmp_path, sim_args=SONY, read={"wb_mode"})
     request.addfinalizer(obs_world.close_camera_reports)
     obs_world.open_camera_report(device_name)
-    shown = dialog(obs_world, lambda d: d["enabled"]["copy"])
+    # Properties are read in separate UI requests. The report can finish
+    # between the Save and Copy reads, producing a mixed-time snapshot.
+    # Require all actions to be ready before inspecting the completed report.
+    shown = dialog(obs_world, lambda d: all(d["enabled"].values()))
     assert shown["enabled"] == {"save": True, "copy": True, "openIssue": True}
     assert shown["progress"] == shown["progress_max"]
     made = obs_world.camera_report(device_name, tmp_path / "report.json")
