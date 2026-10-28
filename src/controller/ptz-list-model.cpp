@@ -191,6 +191,27 @@ static void preset_recalled_cb(void *data, calldata_t *cd)
 	QMetaObject::invokeMethod(ptzlm, [ptzlm, uuid, preset] { emit ptzlm->presetRecalled(uuid, preset); });
 }
 
+/* A removed source can outlive its row and even this model. Disconnect while
+ * a strong reference still makes its signal handler safe to access. This also
+ * permits a detached filter to be reattached without duplicate subscriptions.
+ * During final source destruction the weak reference no longer resolves, and
+ * OBS itself is already disposing of the handler, so there is nothing to do. */
+static void disconnect_source(PTZListModel *model, const OBSWeakSource &weakSource)
+{
+	OBSSourceAutoRelease source = OBSGetStrongRef(weakSource);
+	if (!source)
+		return;
+	signal_handler_t *sh = obs_source_get_signal_handler(source);
+	signal_handler_disconnect(sh, "destroy", filter_destroy_cb, model);
+	signal_handler_disconnect(sh, "ptz_state_changed", device_state_changed_cb, model);
+	signal_handler_disconnect(sh, "update", device_settings_changed_cb, model);
+	for (const char *name : {"ptz_preset_added", "ptz_preset_removed", "ptz_preset_order_changed",
+				 "ptz_preset_changed", "ptz_preset_list_reset"})
+		signal_handler_disconnect(sh, name, preset_sync_cb, model);
+	signal_handler_disconnect(sh, "ptz_preset_create_done", preset_create_done_cb, model);
+	signal_handler_disconnect(sh, "ptz_preset_recalled", preset_recalled_cb, model);
+}
+
 PTZListModel::PTZListModel() : QAbstractItemModel()
 {
 	/* Plugins are loaded before any source is, so there are no devices to look for yet */
@@ -209,6 +230,8 @@ PTZListModel::~PTZListModel()
 	signal_handler_disconnect(global, "source_filter_add", filter_add_cb, this);
 	signal_handler_disconnect(global, "source_remove", source_remove_cb, this);
 	signal_handler_disconnect(global, "source_filter_remove", filter_remove_cb, this);
+	for (const auto &entry : devices)
+		disconnect_source(this, entry.weakSource);
 	ptz_backup_store_stop();
 }
 
@@ -1018,6 +1041,7 @@ void PTZListModel::deviceDestroyed(const QString &uuid)
 	int row = rowByUuid.value(uuid, -1);
 	if (row < 0)
 		return;
+	disconnect_source(this, devices.at(row).weakSource);
 	devices.removeAt(row);
 	rebuildRowIndex();
 	do_reset();
