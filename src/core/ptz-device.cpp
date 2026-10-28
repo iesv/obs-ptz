@@ -1200,7 +1200,12 @@ void ptz_filter_add(void *data, obs_source_t *parent)
 	if (!ptz)
 		return;
 	ptz->setParentSource(parent);
-	/* Attaching to a source doesn't fire a scene change, so force a refresh */
+	/* OBS copies a filter's persisted settings, including thumbnail names.
+	 * A public duplicate must claim its own files before the user can edit
+	 * its presets. AutoConnection does this immediately on the device's Qt
+	 * thread, or queues it there if OBS attached the filter from another
+	 * thread. Private Studio Mode copies are skipped by the claim method.
+	 * Attaching itself does not announce a scene change, so refresh that too. */
 	QMetaObject::invokeMethod(ptz, [ptz]() {
 		ptz->claimPresetThumbnails();
 		ptz->onSceneChanged();
@@ -1508,6 +1513,20 @@ void PTZDevice::capturePresetThumbnail(const QString &id)
 	ptz_capture_source_thumbnail(src, this, [this, id](QImage image) { setPresetThumbnail(id, image); });
 }
 
+/* Give a persistent, user-created copy independent thumbnail files.
+ *
+ * A copied filter receives a new UUID but initially inherits the original's
+ * preset array verbatim. Leaving those file names shared would let updating
+ * or deleting one copy's preset remove the other copy's image. Existing files
+ * already owned by this UUID need no work. Ownerless names from older releases
+ * are copied too; their originals are left for the reference-aware startup
+ * sweep. Temporary private copies never claim or persist thumbnail files.
+ *
+ * This runs on the device's Qt thread, like other preset mutations. A failed
+ * copy keeps the old reference usable and logs the failure; deletion below
+ * also checks shared references so that this fallback cannot delete a peer's
+ * image. Changed paths are persisted before notifying the UI, which must stop
+ * using its cached old path as soon as the copy has its own image. */
 void PTZDevice::claimPresetThumbnails()
 {
 	OBSSourceAutoRelease filter = filterSource();
@@ -1535,6 +1554,15 @@ void PTZDevice::claimPresetThumbnails()
 	}
 }
 
+/* Eagerly remove only an image that this public filter owns exclusively.
+ *
+ * UUID ownership prevents a duplicate from deleting an inherited image; the
+ * peer scan also protects the original when a live duplicate could not copy
+ * that image, for example because the disk was full. Device and preset lists
+ * are confined to the Qt thread here. This work happens only when a thumbnail
+ * is replaced/deleted, never on the per-frame rendering path. Ambiguous legacy
+ * or still-shared files are retained for the startup sweep, which checks saved
+ * scene collections and device backups before collecting an old file. */
 void PTZDevice::removePresetThumbnailFile(const QString &name) const
 {
 	OBSSourceAutoRelease filter = filterSource();

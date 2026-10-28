@@ -314,12 +314,18 @@ bool fillCalldata(const ptzws::Decl &decl, obs_data_t *request, calldata_t *cd, 
 			break;
 		case ptzws::Type::Float:
 			/* A whole number is one too: JSON has no way to say 1.0 */
+			/* Non-finite values cannot describe a position or speed. Reject
+			 * them here rather than letting NaN survive downstream clamps. */
 			ok = type == OBS_DATA_NUMBER && std::isfinite(obs_data_item_get_double(item));
 			if (ok)
 				calldata_set_float(cd, key.c_str(), obs_data_item_get_double(item));
 			break;
 		case ptzws::Type::Int: {
 			double value = type == OBS_DATA_NUMBER ? obs_data_item_get_double(item) : 0.5;
+			/* Check the range BEFORE converting: converting an out-of-range
+			 * floating value to an integer is undefined in C++. The positive
+			 * limit is exclusive because LLONG_MAX rounds to 2^63 as double;
+			 * using <= double(LLONG_MAX) would still admit that invalid value. */
 			const double min = (double)std::numeric_limits<long long>::min();
 			ok = type == OBS_DATA_NUMBER && std::isfinite(value) && value >= min && value < -min &&
 			     value == (double)(long long)value;
@@ -438,6 +444,9 @@ void procRequest(obs_data_t *requestData, obs_data_t *response, void *priv)
 	}
 
 	OBSSourceAutoRelease source = !uuid.empty() ? obs_get_source_by_uuid(uuid.c_str()) : nullptr;
+	/* Apply the same visibility rule to direct UUID calls as to discovery.
+	 * Knowing a temporary copy's UUID must not let a remote controller move
+	 * the frozen program-side viewport behind the preview's controls. */
 	if (!source || !ptz_source_is_device(source) || ptz_source_is_private_copy(source)) {
 		setError(response, "unknown_device", "no PTZ device '" + uuid + "'");
 		return;
@@ -646,6 +655,8 @@ std::vector<OBSSource> allSources()
  * if it is a device or a discovery instance. Main thread. */
 void considerSource(obs_source_t *source)
 {
+	/* Do not register signal subscriptions for render-only copies. They are
+	 * short-lived implementation details, not websocket-controlled cameras. */
 	if (!source || !ptz_source_is_device(source) || ptz_source_is_private_copy(source))
 		return;
 	auto procs = procsOf(source);
@@ -710,6 +721,9 @@ void listDevices(obs_data_t *, obs_data_t *response, void *)
 	 * and what was queued for the main thread when it did has not run */
 	auto unknown = std::make_shared<std::vector<OBSSource>>();
 	for (const OBSSource &source : allSources()) {
+		/* allSources() intentionally includes private OBS objects. Filter
+		 * those copies here as well, including before their queued creation
+		 * notifications have reached the main thread. */
 		if (!ptz_source_is_device(source) || ptz_source_is_private_copy(source) || isDiscovery(procsOf(source)))
 			continue;
 		{

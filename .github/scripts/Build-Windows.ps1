@@ -4,6 +4,8 @@ param(
     [string] $Target = 'x64',
     [ValidateSet('Debug', 'RelWithDebInfo', 'Release', 'MinSizeRel')]
     [string] $Configuration = 'RelWithDebInfo',
+    # Build regression executables and the two OBS-side UI test plugins.
+    # These targets are used by CI only; packaging still installs obs-ptz alone.
     [switch] $EnableTests
 )
 
@@ -50,6 +52,9 @@ function Build {
 
     $CmakeArgs = @('--preset', "windows-ci-${Target}")
     if ( $EnableTests ) {
+        # Enable tests in the initial configure so SDL/Qt dependencies and the
+        # plugin are built once with one consistent configuration. USB tests use
+        # fake backends and require no camera attached to the hosted runner.
         $CmakeArgs += @('-DENABLE_UI_TESTS=ON', '-DENABLE_SOFT_PTZ_TESTS=ON', '-DENABLE_UNIT_TESTS=ON', '-DENABLE_USB_TESTS=ON')
     }
 

@@ -66,6 +66,10 @@ void PTZPelco::attach_interface(PelcoUART *new_iface)
 
 char PTZPelco::checkSum(QByteArray &data)
 {
+	/* send() calls this before prepending D's 0xff sync byte, but after
+	 * adding P's 0xa0/0xaf markers. The supplied range therefore matches
+	 * each protocol's checksum coverage. Preserve the returned byte's bit
+	 * pattern when QByteArray subsequently appends it as a char. */
 	return static_cast<char>(pelco_checksum(data.constData(), static_cast<size_t>(data.size()), use_pelco_d));
 }
 
@@ -139,6 +143,9 @@ void PTZPelco::defaults(obs_data_t *config)
 	obs_data_set_default_int(config, "preset_max", 16);
 	obs_data_set_default_bool(config, "use_pelco_d", false);
 	obs_data_set_default_int(config, "baud_rate", 9600);
+	/* New devices should target camera 1. A zero default also underflows
+	 * P's address-minus-one encoding. This default leaves an explicitly
+	 * configured address in an existing scene collection untouched. */
 	obs_data_set_default_int(config, "address", 1);
 }
 

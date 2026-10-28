@@ -27,6 +27,9 @@ QString ptz_thumbnail_dir()
 		return QString();
 	QString dir = QString::fromUtf8(path);
 	bfree(path);
+	/* Portable OBS may return ../../config/... relative to its bin folder.
+	 * Resolve that inside the OBS process before exposing paths to the UI
+	 * or API clients, whose current working directory may be different. */
 	return QDir(dir).absolutePath();
 }
 
@@ -88,6 +91,11 @@ QImage renderSource(obs_source_t *source)
 	if (!srcWidth || !srcHeight)
 		return QImage();
 
+	/* Bound BOTH dimensions. Limiting only the width makes a tall text or
+	 * portrait source allocate an unexpectedly large render target and CPU
+	 * staging surface. Scale by the longest edge, keep the aspect ratio and
+	 * retain at least one pixel for extremely narrow sources. Products use
+	 * 64-bit arithmetic so the dimension calculation itself cannot overflow. */
 	uint32_t longest = std::max(srcWidth, srcHeight);
 	uint32_t limit = std::min<uint32_t>(PTZ_THUMBNAIL_WIDTH, longest);
 	uint32_t width = std::max<uint32_t>(1, (uint64_t)srcWidth * limit / longest);
@@ -97,6 +105,9 @@ QImage renderSource(obs_source_t *source)
 	obs_enter_graphics();
 	gs_texrender_t *texrender = gs_texrender_create(GS_BGRA, GS_ZS_NONE);
 	gs_stagesurf_t *stage = gs_stagesurface_create(width, height, GS_BGRA);
+	/* Allocation failure must leave the existing preset image intact. An
+	 * empty result is deliberately ignored by setPresetThumbnail(), rather
+	 * than replacing a good thumbnail with a missing or invalid image. */
 	if (!texrender || !stage) {
 		blog(LOG_WARNING, "[obs-ptz] could not allocate thumbnail capture resources (%ux%u)", width, height);
 		gs_stagesurface_destroy(stage);
@@ -131,6 +142,9 @@ QImage renderSource(obs_source_t *source)
 					.convertToFormat(QImage::Format_RGB32);
 			gs_stagesurface_unmap(stage);
 		} else {
+			/* Keep readback failures distinguishable from a UI-only white
+			 * preview when diagnosing graphics-driver-specific reports.
+			 * The same empty-result rule preserves any previous thumbnail. */
 			blog(LOG_WARNING, "[obs-ptz] could not read back the preset thumbnail for '%s'",
 			     obs_source_get_name(source));
 		}

@@ -133,6 +133,9 @@ class OnvifHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
+        # Authentication remains permissive, but record the nonce's wire format
+        # independently of obs-ptz. This catches the wrong EncodingType URI even
+        # when an emulator or a lenient camera otherwise accepts the digest.
         invalid_nonce = False
         try:
             nonce = ET.fromstring(body).find(f'.//{{{NS["wsse"]}}}Nonce')
@@ -141,6 +144,8 @@ class OnvifHandler(BaseHTTPRequestHandler):
         except ET.ParseError:
             pass
         with self.backend.state._lock:
+            # SOAP handlers run on separate HTTP threads. Keep counters exact
+            # so load tests can wait for requests that actually reached a camera.
             self.backend.state.onvif_requests += 1
             self.backend.state.onvif_invalid_nonce_encodings += int(invalid_nonce)
         action, op = parse_soap_action(body)

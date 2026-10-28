@@ -177,6 +177,9 @@ void PTZSoftCam::zoom_abs(double pos)
 void PTZSoftCam::tickViewport(double seconds)
 {
 	OBSSourceAutoRelease filter = filterSource();
+	/* A private Studio Mode copy is a snapshot of the saved viewport. Its
+	 * render callback still runs, but it must not advance movement while
+	 * the public source is being adjusted for the next preview shot. */
 	if (ptz_source_is_private_copy(filter))
 		return;
 	std::lock_guard<std::mutex> lock(m_lock);
@@ -199,6 +202,9 @@ gs_texrender_t *PTZSoftCam::texrender()
 void PTZSoftCam::reportPosition()
 {
 	OBSSourceAutoRelease filter = filterSource();
+	/* Only public devices publish position changes and persist their rest
+	 * position. A temporary copy must not act as another controllable camera
+	 * or write transient program-side state back into copied settings. */
 	if (ptz_source_is_private_copy(filter))
 		return;
 	SoftPosition pos;
@@ -317,8 +323,14 @@ void ptz_soft_cam_register_filter()
 	struct obs_source_info info = {};
 	info.id = "ca.secretlab.obs-ptz.soft-ptz";
 	info.type = OBS_SOURCE_TYPE_FILTER;
-	/* A source copy needs its own filter: sharing one reparents the original
-	 * and leaves it without a target when the copy is destroyed. */
+	/* Soft PTZ owns rendering state, not a connection to physical hardware,
+	 * so every source copy needs its own independent filter and texture.
+	 * With DO_NOT_DUPLICATE, OBS reuses the same filter on the original and
+	 * Studio Mode's private copy, overwrites its single parent/target pair,
+	 * then clears that pair when the copy is freed. That previously caused
+	 * a crash, and the beta3 null guard merely turned it into a black frame.
+	 * Allowing a real filter copy fixes ownership; the private-copy checks
+	 * above and in the controllers keep it passive and out of device lists. */
 	info.output_flags = OBS_SOURCE_VIDEO;
 	info.get_name = [](void *) -> const char * {
 		return "Soft PTZ Control";

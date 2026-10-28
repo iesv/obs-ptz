@@ -7,8 +7,10 @@
 TEST_CASE("D checksum is an unsigned eight-bit sum", "[pelco]")
 {
 	const char diagonal[] = {0x01, 0x00, 0x12, 0x3f, 0x3f};
+	// 1 + 0x12 + 0x3f + 0x3f = 0x91: decimal modulo 100 gives the wrong byte.
 	REQUIRE(pelco_checksum(diagonal, sizeof(diagonal), true) == 0x91);
 	const char rollover[] = {0x0a, char(0x88), char(0x90), 0x00, 0x20};
+	// The standard's rollover example also exercises bytes above signed-char max.
 	REQUIRE(pelco_checksum(rollover, sizeof(rollover), true) == 0x42);
 	const char stop[] = {0x01, 0x00, 0x00, 0x00, 0x00};
 	REQUIRE(pelco_checksum(stop, sizeof(stop), true) == 0x01);

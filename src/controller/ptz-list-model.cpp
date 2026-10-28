@@ -933,6 +933,9 @@ void PTZListModel::deviceCreated(OBSWeakSource weakSource)
 	OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
 	if (!source)
 		return;
+	/* source_filter_add is announced for temporary Studio Mode copies too.
+	 * Exclude them before allocating a row or connecting model signals;
+	 * otherwise each transition can add a duplicate, live-locked camera. */
 	if (ptz_source_is_private_copy(source))
 		return;
 	/* A filter can be added to a source more than once */

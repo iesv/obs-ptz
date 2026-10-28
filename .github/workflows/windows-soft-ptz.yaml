@@ -1,4 +1,7 @@
 name: Windows Soft PTZ Fix
+# Fork validation deliberately uses Windows x64 and OBS 32.0.4, the minimum
+# supported Windows OBS version. The upstream signing service is not used:
+# artifacts are unsigned test builds with an explicit source commit and hashes.
 run-name: Windows x64 Soft PTZ - ${{ github.sha }}
 on:
   push:
@@ -51,6 +54,9 @@ jobs:
           $binary = Get-ChildItem obs-test -Recurse -Filter obs64.exe | Select-Object -First 1
           if (!$binary) { throw 'OBS executable not found' }
           $root = $binary.Directory.Parent.Parent.FullName
+          # Overlay the plugin and test helpers into this disposable OBS only.
+          # The integration fixture creates portable_mode.txt and an isolated
+          # profile; it never needs an installed OBS or a real camera.
           $pluginBin = Join-Path $root 'obs-plugins/64bit'
           $pluginData = Join-Path $root 'data/obs-plugins/obs-ptz'
           New-Item -ItemType Directory -Force -Path $pluginBin, $pluginData | Out-Null
@@ -85,6 +91,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Stress tests failed' }
 
       - name: Package Windows ZIP and installer
+        # Packaging is reached only after functional, USB and soak checks pass.
+        # Test helpers have no install rules, so they cannot enter these packages.
         uses: ./.github/actions/package-plugin
         with:
           target: x64
@@ -113,6 +121,9 @@ jobs:
             release/stress-test-results.xml
 
       - name: Upload test diagnostics
+        # Preserve logs, resource samples and test DLLs even on failure. The DLLs
+        # allow the exact CI build to be checked on a reporter's real GPU without
+        # adding test entry points or diagnostics to the shipped plugin binary.
         if: always()
         uses: actions/upload-artifact@v4
         with:

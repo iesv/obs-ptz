@@ -9,11 +9,23 @@ from test_onvif_position import onvif_device
 
 
 def test_onvif_nonce_uses_base64_encoding(obs_world, onvif_device):
+    """Check the SOAP bytes received by the emulator, not a copied encoder.
+
+    PasswordDigest identifies the password algorithm; the nonce's EncodingType
+    must identify Base64Binary. A camera accepting an invalid attribute must
+    not make this interoperability regression invisible to the test suite.
+    """
     assert obs_world.state()["onvif_requests"] > 0
     assert obs_world.state()["onvif_invalid_nonce_encodings"] == 0
 
 
 def test_a_hidden_settings_preview_releases_its_source(obs_world, soft_cam):
+    """An inactive input should be showing only while this preview is visible.
+
+    Repeat the hide/show sequence without changing selection: showEvent must
+    restore exactly one showing reference and hideEvent must release it again.
+    OBS's public GetSourceActive request observes the actual source state.
+    """
     showing = lambda: obs_world.ws.call("GetSourceActive", {"sourceName": soft_cam})["videoShowing"]
     obs_world.open_settings_dialog(soft_cam)
     obs_world.wait_for(showing)
@@ -26,6 +38,13 @@ def test_a_hidden_settings_preview_releases_its_source(obs_world, soft_cam):
 
 
 def test_a_connected_tcp_camera_can_change_its_port(obs_world, tmp_path):
+    """Changing the endpoint of the same TCP driver must reach a second camera.
+
+    Stop the first simulated camera before editing settings. Then require a
+    real inquiry and a movement on the replacement connection, while the first
+    camera stays stopped. This detects a socket that silently retained its old
+    endpoint even though its saved configuration and UI show the new port.
+    """
     cameras = [FilterPtzsim(), FilterPtzsim()]
     source = "release-check-tcp-host-change"
 

@@ -11,6 +11,9 @@
 ViscaTCPTransport::ViscaTCPTransport(bool dvip) : dvip(dvip), port(default_port())
 {
 	visca_socket.setSocketOption(QAbstractSocket::KeepAliveOption, 1);
+	/* Bound Qt's pending input as well as the packet accumulator below.
+	 * A misconfigured endpoint or malformed stream must not grow memory
+	 * indefinitely. This still accommodates the full 16-bit DVIP frame. */
 	visca_socket.setReadBufferSize(65536);
 	connect(&visca_socket, &QTcpSocket::readyRead, this, &ViscaTCPTransport::poll);
 	connect(&visca_socket, &QTcpSocket::stateChanged, this, &ViscaTCPTransport::on_socket_stateChanged);
@@ -18,6 +21,9 @@ ViscaTCPTransport::ViscaTCPTransport(bool dvip) : dvip(dvip), port(default_port(
 
 void ViscaTCPTransport::connectSocket()
 {
+	/* Both explicit reconfiguration and delayed reconnect timers reach this
+	 * method. An old timer must not call connectToHost() on a socket that
+	 * has already connected successfully to the newly configured camera. */
 	if (!effectiveHost().isEmpty() && visca_socket.state() == QAbstractSocket::UnconnectedState)
 		visca_socket.connectToHost(effectiveHost(), port);
 }
@@ -112,6 +118,9 @@ void ViscaTCPTransport::poll()
 		return;
 	}
 	for (auto b : visca_socket.readAll()) {
+		/* Plain VISCA is terminated by 0xff. Drop an oversized unfinished
+		 * packet so a stream without that delimiter remains memory-bounded;
+		 * the next delimiter allows the parser to start a fresh packet. */
 		if (rxbuffer.size() >= 65536)
 			rxbuffer.clear();
 		rxbuffer += b;
@@ -136,6 +145,10 @@ void ViscaTCPTransport::setSourceHost(const QString &new_host)
 
 void ViscaTCPTransport::update(OBSData config)
 {
+	/* Keep the previous endpoint until the complete new configuration has
+	 * been read, including the legacy port fallback. Applying unrelated
+	 * settings must preserve a healthy connection; changing host or port
+	 * must close the old one, otherwise QTcpSocket stays on that endpoint. */
 	QString oldHost = host;
 	int oldPort = port;
 	host = obs_data_get_string(config, "host");
@@ -145,6 +158,9 @@ void ViscaTCPTransport::update(OBSData config)
 	if (!port)
 		port = default_port();
 
+	/* abort() also schedules the normal reconnect timer. connectSocket()
+	 * starts the replacement immediately, and its state guard makes that
+	 * later timer harmless once the new connection is established. */
 	if (host != oldHost || port != oldPort)
 		visca_socket.abort();
 	connectSocket();

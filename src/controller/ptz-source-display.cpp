@@ -23,6 +23,9 @@ PTZSourceDisplay::PTZSourceDisplay(QWidget *parent) : OBSQTDisplay(parent)
 	 * draws into it */
 	connect(this, &OBSQTDisplay::DisplayCreated, this, [this]() {
 		obs_display_add_draw_callback(GetDisplay(), draw, this);
+		/* The native OBS display can outlive a visible Qt page. Match its
+		 * enabled state to the widget instead of assuming a hidden native
+		 * window automatically stops the graphics-thread draw callback. */
 		obs_display_set_enabled(GetDisplay(), isVisible());
 	});
 }
@@ -67,6 +70,9 @@ void PTZSourceDisplay::showEvent(QShowEvent *event)
 	watchAncestors();
 	syncNativeGeometry();
 	{
+		/* A previously hidden preview released its showing reference. Take
+		 * exactly one reference again before rendering resumes, even when
+		 * the selected source itself has not changed since the last show. */
 		std::lock_guard<std::mutex> guard(m_lock);
 		OBSSourceAutoRelease source = obs_weak_source_get_source(m_source);
 		if (source && !m_showing) {
@@ -81,6 +87,10 @@ void PTZSourceDisplay::showEvent(QShowEvent *event)
 void PTZSourceDisplay::hideEvent(QHideEvent *event)
 {
 	OBSQTDisplay::hideEvent(event);
+	/* Stop both kinds of work while hidden: the display callback must not
+	 * keep drawing, and the selected source must not remain "showing" only
+	 * because this closed dialog once previewed it. The latter can keep a
+	 * camera or browser source producing frames unnecessarily. */
 	if (GetDisplay())
 		obs_display_set_enabled(GetDisplay(), false);
 	releaseShowing();
@@ -147,6 +157,8 @@ void PTZSourceDisplay::setSource(OBSSource source)
 		return;
 	releaseShowingLocked();
 	m_source = weak;
+	/* Selection changes may arrive while the settings page is hidden.
+	 * Remember the source then, but activate it only when showEvent runs. */
 	if (source && isVisible()) {
 		obs_source_inc_showing(source);
 		m_showing = true;
@@ -196,6 +208,10 @@ void PTZSourceDisplay::draw(void *param, uint32_t cx, uint32_t cy)
 
 	gs_viewport_push();
 	gs_projection_push();
+	/* Source previews share OBS's graphics context with scene rendering and
+	 * thumbnail captures. Start with an identity model matrix and restore
+	 * the caller's matrix afterwards; a transform left by another render
+	 * pass must not scale or translate this independent display. */
 	gs_matrix_push();
 	gs_matrix_identity();
 	/* As OBS's own previews do, or the colors come out wrong */

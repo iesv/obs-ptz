@@ -116,6 +116,9 @@ static void backup_filter(obs_source_t *filter, const QString &source)
  * name for when it has none */
 static void backup_on(obs_source_t *filter, obs_source_t *parent)
 {
+	/* Removing a temporary program copy is an ordinary part of a Studio
+	 * Mode transition. Backing it up would overwrite the user's public
+	 * camera backup with transient settings from a render-only instance. */
 	if (!filter || !parent || obs_obj_is_private(parent) || !ptz_source_is_device(filter))
 		return;
 	QString name = QT_UTF8(obs_source_get_name(parent));
@@ -131,6 +134,8 @@ static void filter_added_cb(void *, calldata_t *cd)
 {
 	auto parent = static_cast<obs_source_t *>(calldata_ptr(cd, "source"));
 	auto filter = static_cast<obs_source_t *>(calldata_ptr(cd, "filter"));
+	/* Do not remember a private copy's name for the later destroy callback:
+	 * its parent may already be null by the time that callback runs. */
 	if (!parent || !filter || obs_obj_is_private(parent) || !ptz_source_is_device(filter))
 		return;
 	QMutexLocker locker(&backup_mutex);
@@ -170,6 +175,9 @@ static void source_destroyed_cb(void *, calldata_t *cd)
 	}
 	/* The source it is on, if it still is on one, is what it is called now */
 	obs_source_t *parent = obs_filter_get_parent(source);
+	/* Also cover destruction while the private parent is still attached.
+	 * If it has already detached, the add callback above deliberately left
+	 * no remembered name, so backup_filter() has nothing to save. */
 	if (parent && obs_obj_is_private(parent))
 		return;
 	if (parent)

@@ -43,6 +43,10 @@ static void sweepThumbnails(QString thumbnailDir, QString configDir)
 		blog(LOG_INFO, "[obs-ptz] thumbnail sweep skipped: can't find the scene collections");
 		return;
 	}
+	/* A removed camera can exist only in device-backups.json until the user
+	 * restores it. Those images are still in use even though no scene names
+	 * them. Include safe-save .bak/.tmp versions as well: a recoverable saved
+	 * configuration must not lose its images just because it is not current. */
 	sources.append(QDir(configDir).entryInfoList({"config.json*", "device-backups.json*"}, QDir::Files));
 
 	QByteArray text;

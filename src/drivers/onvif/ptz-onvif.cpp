@@ -55,6 +55,10 @@ const QString nsWssSecext("http://docs.oasis-open.org/wss/2004/01/oasis-200401-w
 const QString nsWssUtility("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"); //wsu
 const QString nsWssPasswordDigest(
 	"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest");
+/* UsernameToken uses DIFFERENT URIs for the password digest algorithm and
+ * the nonce's binary encoding. Reusing PasswordDigest as Nonce/EncodingType
+ * makes an otherwise correct digest non-conforming and can be rejected by
+ * strict cameras. The nonce's bytes and the digest calculation stay unchanged. */
 const QString nsWssBase64Binary(
 	"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary");
 
@@ -761,6 +765,12 @@ void PTZOnvif::requestFinished(QNetworkReply *reply)
 
 PTZOnvif::PTZOnvif(OBSData config, obs_source_t *source) : PTZDevice(config, source)
 {
+	/* QNetworkAccessManager owns replies but does not normally delete each
+	 * completed reply automatically. Status polling would therefore retain
+	 * every reply until the camera device was destroyed. Let Qt dispose of
+	 * replies AFTER the finished signal has been delivered: requestFinished()
+	 * can still read their complete body, but a long-running camera no longer
+	 * accumulates reply objects. No other code retains a reply pointer. */
 	m_networkManager.setAutoDeleteReplies(true);
 	// for digest authenticaton request
 	connect(&m_networkManager, &QNetworkAccessManager::authenticationRequired, this, &PTZOnvif::authRequired);

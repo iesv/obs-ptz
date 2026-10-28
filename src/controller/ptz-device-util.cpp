@@ -30,6 +30,10 @@ bool ptz_source_is_private_copy(obs_source_t *source)
 {
 	if (!source || obs_source_get_type(source) != OBS_SOURCE_TYPE_FILTER)
 		return false;
+	/* A private filter is not necessarily a private device: public inputs
+	 * also own private filters. The input's identity determines whether this
+	 * instance is a temporary Studio Mode render copy. A null parent covers
+	 * the interval between creation and attachment, and detached filters. */
 	obs_source_t *parent = obs_filter_get_parent(source);
 	return !parent || obs_obj_is_private(parent);
 }

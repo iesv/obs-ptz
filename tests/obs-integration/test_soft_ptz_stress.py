@@ -1,4 +1,16 @@
-"""Opt-in soak test: PTZ_STRESS=1, PTZ_STRESS_CYCLES=100 (per source kind)."""
+"""Opt-in release soak tests against a real, isolated OBS process.
+
+Set PTZ_STRESS=1 and PTZ_STRESS_CYCLES=100 to exercise each source kind with
+100 moves, preset captures/recalls and Studio Mode transitions, plus a public
+source copy/deletion every five cycles. The image is 1920x1080 so texture
+creation and destruction are tested at video resolution, not just icon size.
+
+Samples measure the OBS process, not pytest or the camera simulator. Compare
+steady-state medians after warm-up so allocator caches are not mistaken for a
+leak. The bounds are regression tripwires, not a guarantee about every GPU:
+RSS measures host memory, and process handles do not measure dedicated VRAM.
+Metrics are written beside pytest's artifacts for independent review.
+"""
 import json
 import os
 import statistics
@@ -17,6 +29,11 @@ pytestmark = pytest.mark.skipif(os.environ.get("PTZ_STRESS") != "1", reason="opt
 
 
 def write_large_image(path):
+    """Write a compressible, two-colour HD image without extra image libraries.
+
+    Its known left/right colours let screenshots verify content after moving,
+    instead of merely proving that a screenshot request returned some bytes.
+    """
     width, height = 1920, 1080
     row = b"\0" + bytes(RED) * (width // 2) + bytes(GREEN) * (width // 2)
 
@@ -29,6 +46,13 @@ def write_large_image(path):
 
 @pytest.mark.parametrize("kind", ["image", "text"])
 def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mode, tmp_path, kind):
+    """Keep eight live presets while cycling transient and persistent copies.
+
+    Each cycle checks earlier thumbnails, and each public copy is rendered
+    before deletion so its GPU resources actually need to be allocated/freed.
+    The device-list invariant catches private-copy leaks independently of the
+    memory thresholds. Both an HD image and a native OBS text source are used.
+    """
     cycles = int(os.environ.get("PTZ_STRESS_CYCLES", "100"))
     assert cycles >= 20
     camera_scene, other_scene = obs_world.create_scene(), obs_world.create_scene()
@@ -87,6 +111,8 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
             assert devices() == expected_devices
             samples.append({"rss": process.memory_info().rss,
                             "handles": process.num_handles() if os.name == "nt" else process.num_fds()})
+        # Ignore initial texture, font and Qt-cache allocation. Compare two
+        # multi-sample windows so one background allocation does not dominate.
         baseline = samples[10:20]
         final = samples[-10:]
         report = {
@@ -106,6 +132,13 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
 
 
 def test_onvif_request_soak(obs_world, onvif_device, tmp_path):
+    """Exercise 1,200 real SOAP requests through the production ONVIF driver.
+
+    The simulator's received-request counter prevents a burst of commands that
+    was only queued or dropped from being mistaken for completed load. Early
+    batches warm network pools and XML/Qt allocations before RSS is compared.
+    This covers the completed-QNetworkReply lifetime during sustained use.
+    """
     process = psutil.Process(obs_world.obs_process().pid)
     samples = []
     started = time.monotonic()

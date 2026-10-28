@@ -384,7 +384,9 @@ public:
 	void clearPresetThumbnail(const QString &id);
 	/* Grabs a frame of the device's source as the preset's thumbnail */
 	void capturePresetThumbnail(const QString &id);
-	/* A user-created copy owns copies of its inherited thumbnail files. */
+	/* After attachment, copy inherited thumbnail files for a public device.
+	 * Private render copies are ignored. Both methods run on the device's
+	 * Qt thread and preserve files that another live device still needs. */
 	void claimPresetThumbnails();
 	void removePresetThumbnailFile(const QString &name) const;
 

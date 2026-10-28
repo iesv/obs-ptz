@@ -58,6 +58,9 @@ void ViscaUART::receive_datagram(const QByteArray &packet)
 void ViscaUART::receiveBytes(const QByteArray &msg)
 {
 	for (auto b : msg) {
+		/* A wrong baud rate or noisy serial line may never produce VISCA's
+		 * 0xff terminator. Bound the unfinished packet just as the TCP
+		 * transport does, rather than retaining garbage for the whole session. */
 		if (rxbuffer.size() >= 65536)
 			rxbuffer.clear();
 		rxbuffer += b;
