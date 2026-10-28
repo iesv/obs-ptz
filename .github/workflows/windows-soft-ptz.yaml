@@ -100,22 +100,13 @@ jobs:
           python -m pytest tests/obs-integration/test_soft_ptz_stress.py -v -s --maxfail=1 --junitxml=release/stress-test-results.xml --basetemp=work/stress-results
           if ($LASTEXITCODE -ne 0) { throw 'Stress tests failed' }
 
-      - name: Package Windows ZIP and installer
+      - name: Package Windows ZIP with BAT installer
         # Packaging is reached only after functional, USB and soak checks pass.
         # Test helpers have no install rules, so they cannot enter these packages.
-        uses: ./.github/actions/package-plugin
-        with:
-          target: x64
-          config: RelWithDebInfo
-          package: 'true'
+        run: .github/scripts/Package-WindowsZip.ps1 -Commit '${{ github.sha }}' -Repository '${{ github.repository }}'
 
-      - name: Record build provenance and checksums
-        run: |
-          "Commit: ${{ github.sha }}`nRepository: ${{ github.repository }}`nOBS: 32.0.4 or later`nArchitecture: Windows x64`nUnsigned fork test build" | Set-Content release/BUILD-INFO.txt
-          Get-ChildItem release -File | Where-Object { $_.Extension -in '.zip', '.exe' } | ForEach-Object {
-            $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
-            "$($hash.Hash.ToLower())  $($_.Name)"
-          } | Set-Content release/SHA256SUMS.txt
+      - name: Test BAT installation and upgrade
+        run: .github/scripts/Test-WindowsZip.ps1
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
@@ -124,11 +115,6 @@ jobs:
           if-no-files-found: error
           path: |
             release/*-windows-x64.zip
-            release/*-windows-x64-Installer.exe
-            release/BUILD-INFO.txt
-            release/SHA256SUMS.txt
-            release/soft-ptz-test-results.xml
-            release/stress-test-results.xml
 
       - name: Upload test diagnostics
         # Preserve logs, resource samples and test DLLs even on failure. The DLLs
