@@ -1,0 +1,72 @@
+name: Package validated Windows ZIP
+on:
+  workflow_dispatch:
+    inputs:
+      validated_run:
+        description: Run whose compilation, functional, USB and stress gates passed
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows-zip:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate and reuse the tested binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.validated_run }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SOURCE_RUN -notmatch '^\d+$') { throw 'Invalid run id' }
+          $source = gh api "repos/${{ github.repository }}/actions/runs/$env:SOURCE_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read validated run' }
+          $jobs = gh api "repos/${{ github.repository }}/actions/runs/$env:SOURCE_RUN/jobs" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read validation gates' }
+          foreach ($name in @('Build plugin and regression tests', 'Run viewport and lifecycle unit tests', 'Run OBS Soft PTZ regression tests', 'Run USB backend and worker tests', 'Run repeated source, preset and transition stress tests')) {
+            if (!($jobs.jobs.steps | Where-Object { $_.name -eq $name -and $_.conclusion -eq 'success' })) { throw "Missing successful gate: $name" }
+          }
+          # Only installer/packaging changes can reuse a binary. Compare every
+          # changed path, including build inputs and tests; a runtime change
+          # forces the normal compilation and full test workflow instead.
+          $changed = git diff --name-only $source.head_sha $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Could not compare source trees' }
+          foreach ($path in $changed) {
+            if ($path -notmatch '^(installer/|\.github/scripts/(Package-WindowsZip|Test-WindowsZip)\.ps1$|\.github/workflows/(windows-soft-ptz|package-validated-zip)\.yaml$)') { throw "Requires a new validated build: $path" }
+          }
+          gh run download $env:SOURCE_RUN --repo '${{ github.repository }}' --name "obs-ptz-test-tools-$($source.head_sha)" --dir validated-tools
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download tested binaries' }
+          gh run download $env:SOURCE_RUN --repo '${{ github.repository }}' --name "windows-soft-ptz-test-diagnostics-$($source.head_sha)" --dir validated-diagnostics
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download test evidence' }
+          New-Item -ItemType Directory -Path work, release | Out-Null
+          Copy-Item validated-tools/release/RelWithDebInfo -Destination release -Recurse
+          Copy-Item validated-diagnostics/release/*.xml -Destination release
+          "PLUGIN_COMMIT=$($source.head_sha)" >> $env:GITHUB_ENV
+          @{source_run=$env:SOURCE_RUN; plugin_commit=$source.head_sha; package_commit=$env:GITHUB_SHA; changed_paths=@($changed)} | ConvertTo-Json | Set-Content release/source-validation.json
+      - name: Package Windows ZIP with BAT installer
+        run: .github/scripts/Package-WindowsZip.ps1 -Commit '${{ github.sha }}' -Repository '${{ github.repository }}' -PluginCommit $env:PLUGIN_COMMIT
+      - name: Test BAT installation and upgrade
+        run: .github/scripts/Test-WindowsZip.ps1
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-ptz-soft-ptz-fixed-windows-x64-${{ github.sha }}
+          if-no-files-found: error
+          path: release/*-windows-x64.zip
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-soft-ptz-test-diagnostics-${{ github.sha }}
+          path: |
+            release/*.xml
+            release/source-validation.json
+            validated-diagnostics/work/stress-results/

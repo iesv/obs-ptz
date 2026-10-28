@@ -2,9 +2,10 @@
 # The plugin payload comes from CMake's install tree; test DLLs have no install
 # rules. No EXE installer or signing service is involved in this fork package.
 [CmdletBinding()]
-param([string] $Commit, [string] $Repository)
+param([string] $Commit, [string] $Repository, [string] $PluginCommit)
 $ErrorActionPreference = 'Stop'
 if (!$env:CI) { throw 'This packaging script is intended for CI.' }
+if (!$PluginCommit) { $PluginCommit = $Commit }
 $project = (Resolve-Path "$PSScriptRoot/../..").Path
 $spec = Get-Content -LiteralPath (Join-Path $project 'buildspec.json') -Raw | ConvertFrom-Json
 $bundle = Join-Path $project 'work/windows-zip'
@@ -20,7 +21,7 @@ $bat = $bat.Replace("`r`n", "`n").Replace("`n", "`r`n")
 [IO.File]::WriteAllText((Join-Path $bundle 'install.bat'), $bat, [Text.Encoding]::ASCII)
 Copy-Item -LiteralPath (Join-Path $project 'installer/README-Windows.txt') -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $project 'LICENSE') -Destination $bundle
-"Commit: $Commit`nRepository: $Repository`nOBS: 32.0.4 or later`nArchitecture: Windows x64`nUnsigned fork test build" | Set-Content -LiteralPath (Join-Path $bundle 'BUILD-INFO.txt') -Encoding utf8
+"Commit: $Commit`nPlugin commit: $PluginCommit`nRepository: $Repository`nOBS: 32.0.4 or later`nArchitecture: Windows x64`nUnsigned fork test build" | Set-Content -LiteralPath (Join-Path $bundle 'BUILD-INFO.txt') -Encoding utf8
 # Hash every shipped file, including the installer, using relative portable
 # paths. The manifest itself is excluded because it cannot hash itself.
 Get-ChildItem -LiteralPath $bundle -Recurse -File | Sort-Object FullName | ForEach-Object {

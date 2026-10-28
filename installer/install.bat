@@ -4,7 +4,7 @@ rem This is a single-file BAT/PowerShell installer. Pass paths through the
 rem environment so spaces and non-ASCII extraction directories remain literal.
 set "OBS_PTZ_INSTALL_SCRIPT=%~f0"
 set "OBS_PTZ_INSTALL_PACKAGE=%~dp0"
-powershell.exe -NoLogo -NoProfile -Command "$t=[IO.File]::ReadAllText($env:OBS_PTZ_INSTALL_SCRIPT); & ([scriptblock]::Create($t.Substring($t.LastIndexOf('#--OBS-PTZ-POWERSHELL--'))))"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$t=[IO.File]::ReadAllText($env:OBS_PTZ_INSTALL_SCRIPT); & ([scriptblock]::Create($t.Substring($t.LastIndexOf('#--OBS-PTZ-POWERSHELL--'))))"
 set "OBS_PTZ_INSTALL_RESULT=%ERRORLEVEL%"
 rem An elevated child already displayed its result. Avoid a second pause.
 if "%OBS_PTZ_INSTALL_RESULT%"=="200" exit /b 0
@@ -13,6 +13,11 @@ exit /b %OBS_PTZ_INSTALL_RESULT%
 #--OBS-PTZ-POWERSHELL--
 $ErrorActionPreference = 'Stop'
 try {
+    # A PowerShell 7 parent can pass module paths that Windows PowerShell 5.1
+    # cannot use. Import the built-in manifests from this engine's own home,
+    # rather than depending on the caller's module discovery configuration.
+    Import-Module ($PSHOME + '\Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1')
+    Import-Module ($PSHOME + '\Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
     if (![Environment]::Is64BitOperatingSystem) { throw 'Windows x64 is required.' }
     $source = Join-Path $env:OBS_PTZ_INSTALL_PACKAGE 'obs-ptz'
     $dll = Join-Path $source 'bin\64bit\obs-ptz.dll'
