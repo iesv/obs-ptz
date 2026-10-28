@@ -64,7 +64,8 @@ jobs:
 
       - name: Run OBS Soft PTZ regression tests
         run: |
-          python -m pytest tests/obs-integration/test_soft_ptz.py tests/obs-integration/test_preset_api.py -v --junitxml=release/soft-ptz-test-results.xml --basetemp=work/test-results
+          New-Item -ItemType Directory -Force -Path work | Out-Null
+          python -m pytest tests/obs-integration -v --maxfail=3 --junitxml=release/soft-ptz-test-results.xml --basetemp=work/test-results
           if ($LASTEXITCODE -ne 0) { throw 'OBS regression tests failed' }
 
       - name: Package Windows ZIP and installer
@@ -105,3 +106,5 @@ jobs:
             work/test-results/
             obs-test/config/obs-studio/logs/
             obs-test/config/obs-studio/crashes/
+            build_x64/rundir/RelWithDebInfo/*.dll
+            release/RelWithDebInfo/obs-ptz/
