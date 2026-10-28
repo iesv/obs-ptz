@@ -419,11 +419,9 @@ def duplicating_studio_mode(obs_world):
 
 
 def test_studio_mode_copies_of_its_source_dont_crash_obs(obs_world, duplicating_studio_mode, tmp_path):
-    """OBS puts the source's filter on each copy of the source it sends to
-    program as well, as the filter may not be duplicated, and freeing the copy
-    takes the filter's parent and target away from under the source still
-    drawing it. Drawing it then crashed OBS (#428): now it draws nothing. The
-    source shows nothing from then on, until the filter is added again."""
+    """Sharing a non-duplicable filter with Studio Mode's copies used to
+    detach it from its original source (#428). Each copy needs its own
+    filter, and temporary copies must stay out of the device list."""
     image = tmp_path / "quadrants.png"
     write_quadrant_png(image)
     source = f"soft-ptz-cam-{next(_names)}"
@@ -441,6 +439,10 @@ def test_studio_mode_copies_of_its_source_dont_crash_obs(obs_world, duplicating_
                                       timeout=10)
     move(obs_world, source, pan=0.75, tilt=0.75, zoom=1.0)
     wait_for_position(obs_world, source, tmp_path, pan=0.75, tilt=0.75, zoom=1.0)
+    expected = {"tl": GREEN, "tr": GREEN, "bl": GREEN, "br": GREEN}
+    listed = lambda: {d["device"] for d in obs_world.ws.vendor("obs-ptz", "ptz_list_devices")["devices"]}
+    before = listed()
+    before_ui = obs_world.preset_view()["device_names"]
 
     # Each transition sends a new copy of the scene to program and frees the last
     for scene in (cam_scene, other_scene) * 3:
@@ -448,7 +450,9 @@ def test_studio_mode_copies_of_its_source_dont_crash_obs(obs_world, duplicating_
         obs_world.ws.call("TriggerStudioModeTransition")
         time.sleep(1)
         # OBS is still there, drawing the source
-        screenshot(obs_world, source)
+        wait_for_corners(obs_world, source, expected)
+        assert listed() == before, "a private source copy became a controllable device"
+        assert obs_world.preset_view()["device_names"] == before_ui
     obs_world.ws.call("RemoveInput", {"inputName": source})
 
 
@@ -481,6 +485,69 @@ def test_a_thumbnail_is_named_for_its_filter(obs_world, soft_cam):
     obs_world.wait_for(lambda: thumbnail_image(obs_world, soft_cam, preset), timeout=10)
     name = thumbnail_name(preset_thumbnails(obs_world, soft_cam)[preset])
     assert name.startswith(obs_world.device_uuid(soft_cam) + "_"), name
+
+
+def test_saving_many_presets_keeps_their_images(obs_world, soft_cam, tmp_path):
+    """Repeated screenshot captures must not blank the source or remove an
+    earlier preset's thumbnail (#428)."""
+    captured = {}
+    obs_world.open_settings_dialog(soft_cam)
+    for pan, tilt in [(0.75, 0.75), (-0.75, 0.75), (-0.75, -0.75), (0.75, -0.75)] * 3:
+        move(obs_world, soft_cam, pan=pan, tilt=tilt, zoom=1.0)
+        wait_for_position(obs_world, soft_cam, tmp_path, pan=pan, tilt=tilt, zoom=1.0)
+        colour = GREEN if pan > 0 and tilt > 0 else RED if tilt > 0 else YELLOW if pan > 0 else BLUE
+        wait_for_corners(obs_world, soft_cam, dict.fromkeys(("tl", "tr", "bl", "br"), colour))
+        preset = obs_world.create_preset(soft_cam, "pictured", store="local")
+        obs_world.wait_for(lambda: thumbnail_image(obs_world, soft_cam, preset), timeout=10)
+        captured[preset] = thumbnail_image(obs_world, soft_cam, preset)
+        assert all(thumbnail_image(obs_world, soft_cam, p) == image for p, image in captured.items())
+
+
+def test_a_duplicate_owns_its_thumbnails(obs_world, soft_cam):
+    obs_world.need_ui_driver()
+    preset = obs_world.create_preset(soft_cam, "pictured", store="local")
+    obs_world.wait_for(lambda: thumbnail_image(obs_world, soft_cam, preset), timeout=10)
+    original = thumbnail_image(obs_world, soft_cam, preset)
+    scene = obs_world.create_scene()
+    copy = f"soft-ptz-copy-{next(_names)}"
+    obs_world.ui.call("duplicate_source", name=soft_cam, copy=copy, scene=scene)
+    obs_world.wait_for(lambda: obs_world.device_uuid(copy), timeout=10)
+    obs_world.wait_for(lambda: thumbnail_name(preset_thumbnails(obs_world, copy).get(preset, "")).startswith(
+        obs_world.device_uuid(copy) + "_"), timeout=10)
+    assert thumbnail_image(obs_world, copy, preset) == original
+    assert preset_thumbnails(obs_world, copy)[preset] != preset_thumbnails(obs_world, soft_cam)[preset]
+    obs_world.call_proc(copy, "ptz_preset_delete", {"id": preset})
+    assert thumbnail_image(obs_world, soft_cam, preset) == original
+    obs_world.ws.call("RemoveInput", {"inputName": copy})
+
+
+def test_a_text_source_keeps_its_presets_and_picture(obs_world, tmp_path):
+    kinds = obs_world.ws.call("GetInputKindList")["inputKinds"]
+    text_kinds = [kind for kind in kinds if kind.startswith(("text_gdiplus", "text_ft2_source"))]
+    if not text_kinds:
+        pytest.skip("OBS has no text source")
+    source = f"soft-ptz-text-{next(_names)}"
+    scene = obs_world.create_scene()
+    obs_world.ws.call("CreateInput", {
+        "sceneName": scene, "inputName": source, "inputKind": sorted(text_kinds)[-1],
+        "inputSettings": {"text": "Soft PTZ 0123456789", "font": {"face": "Arial", "size": 72}},
+    })
+    obs_world.ws.call("CreateSourceFilter", {
+        "sourceName": source, "filterName": "Soft PTZ", "filterKind": FILTER_KIND,
+        "filterSettings": {"max_zoom": 4.0, "recall_seconds": 0.1},
+    })
+    obs_world.wait_for(lambda: obs_world.device_uuid(source), timeout=10)
+    captured = {}
+    for zoom in [0.0, 0.2, 0.4, 0.6] * 3:
+        move(obs_world, source, pan=0.0, tilt=0.0, zoom=zoom)
+        wait_for_position(obs_world, source, tmp_path, zoom=zoom)
+        width, height, pixel = screenshot(obs_world, source)
+        assert any(max(pixel(x, y)) > 32 for y in range(height) for x in range(width)), "text went blank"
+        preset = obs_world.create_preset(source, "text", store="local")
+        obs_world.wait_for(lambda: thumbnail_image(obs_world, source, preset), timeout=10)
+        captured[preset] = thumbnail_image(obs_world, source, preset)
+        assert all(thumbnail_image(obs_world, source, p) == image for p, image in captured.items())
+    obs_world.ws.call("RemoveInput", {"inputName": source})
 
 
 # ------------------------------------------------- beyond the source's bounds

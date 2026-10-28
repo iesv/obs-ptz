@@ -116,7 +116,7 @@ static void backup_filter(obs_source_t *filter, const QString &source)
  * name for when it has none */
 static void backup_on(obs_source_t *filter, obs_source_t *parent)
 {
-	if (!filter || !parent || !ptz_source_is_device(filter))
+	if (!filter || !parent || obs_obj_is_private(parent) || !ptz_source_is_device(filter))
 		return;
 	QString name = QT_UTF8(obs_source_get_name(parent));
 	{
@@ -131,7 +131,7 @@ static void filter_added_cb(void *, calldata_t *cd)
 {
 	auto parent = static_cast<obs_source_t *>(calldata_ptr(cd, "source"));
 	auto filter = static_cast<obs_source_t *>(calldata_ptr(cd, "filter"));
-	if (!parent || !filter || !ptz_source_is_device(filter))
+	if (!parent || !filter || obs_obj_is_private(parent) || !ptz_source_is_device(filter))
 		return;
 	QMutexLocker locker(&backup_mutex);
 	filter_sources.insert(QT_UTF8(obs_source_get_uuid(filter)), QT_UTF8(obs_source_get_name(parent)));
@@ -170,6 +170,8 @@ static void source_destroyed_cb(void *, calldata_t *cd)
 	}
 	/* The source it is on, if it still is on one, is what it is called now */
 	obs_source_t *parent = obs_filter_get_parent(source);
+	if (parent && obs_obj_is_private(parent))
+		return;
 	if (parent)
 		name = QT_UTF8(obs_source_get_name(parent));
 	backup_filter(source, name);

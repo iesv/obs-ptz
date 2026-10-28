@@ -56,6 +56,10 @@ extern obs_source_t *ptz_device_create_filter(obs_source_t *parent, obs_data_t *
  * PTZ_API_VERSION_MINOR_NEEDED (see docs/ptz-device-api.md). Nothing about its id says so. */
 extern bool ptz_source_is_device(obs_source_t *source);
 
+/* A filter on a private (Studio Mode) source, or not attached yet, is not a
+ * controllable device. Filters themselves are always private. */
+extern bool ptz_source_is_private_copy(obs_source_t *source);
+
 /* Whether `source` is `scene` or one of the sources it shows. Inline, as both
  * the controller and the devices use it. */
 struct ptz_source_active_data {

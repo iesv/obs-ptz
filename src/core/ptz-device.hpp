@@ -384,6 +384,9 @@ public:
 	void clearPresetThumbnail(const QString &id);
 	/* Grabs a frame of the device's source as the preset's thumbnail */
 	void capturePresetThumbnail(const QString &id);
+	/* A user-created copy owns copies of its inherited thumbnail files. */
+	void claimPresetThumbnails();
+	void removePresetThumbnailFile(const QString &name) const;
 
 	/**
 	 * do_update() method is to be implemented by each driver as the way

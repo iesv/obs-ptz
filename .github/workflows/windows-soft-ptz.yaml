@@ -1,0 +1,107 @@
+name: Windows Soft PTZ Fix
+run-name: Windows x64 Soft PTZ - ${{ github.sha }}
+on:
+  push:
+    branches: [fix/soft-ptz-windows]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build plugin and regression tests
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x64
+          config: RelWithDebInfo
+          tests: 'true'
+
+      - name: Run viewport and lifecycle unit tests
+        run: |
+          & ./build_x64/tests/soft-ptz/RelWithDebInfo/soft-ptz-tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Soft PTZ unit tests failed' }
+          & ./build_x64/tests/unit/RelWithDebInfo/ptz-unit-tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Core unit tests failed' }
+
+      - name: Prepare isolated portable OBS 32.0.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release download 32.0.4 --repo obsproject/obs-studio --pattern '*Windows*x64.zip' --dir obs-download
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download OBS' }
+          $archive = Get-ChildItem obs-download -Filter '*.zip' | Select-Object -First 1
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath obs-test
+          $binary = Get-ChildItem obs-test -Recurse -Filter obs64.exe | Select-Object -First 1
+          if (!$binary) { throw 'OBS executable not found' }
+          $root = $binary.Directory.Parent.Parent.FullName
+          $pluginBin = Join-Path $root 'obs-plugins/64bit'
+          $pluginData = Join-Path $root 'data/obs-plugins/obs-ptz'
+          New-Item -ItemType Directory -Force -Path $pluginBin, $pluginData | Out-Null
+          Copy-Item release/RelWithDebInfo/obs-ptz/bin/64bit/*.dll -Destination $pluginBin
+          Copy-Item release/RelWithDebInfo/obs-ptz/data/* -Destination $pluginData -Recurse
+          Copy-Item build_x64/rundir/RelWithDebInfo/obs-ui-driver.dll -Destination $pluginBin
+          Copy-Item build_x64/rundir/RelWithDebInfo/obs-ptz-ui-harness.dll -Destination $pluginBin
+          "PTZSIM_OBS_BINARY=$($binary.FullName)" >> $env:GITHUB_ENV
+          "PYTHONPATH=$((Join-Path $pwd 'scripts'))" >> $env:GITHUB_ENV
+          python -m pip install -r tests/obs-integration/requirements.txt
+
+      - name: Run OBS Soft PTZ regression tests
+        run: |
+          python -m pytest tests/obs-integration/test_soft_ptz.py tests/obs-integration/test_preset_api.py -v --junitxml=release/soft-ptz-test-results.xml --basetemp=work/test-results
+          if ($LASTEXITCODE -ne 0) { throw 'OBS regression tests failed' }
+
+      - name: Package Windows ZIP and installer
+        uses: ./.github/actions/package-plugin
+        with:
+          target: x64
+          config: RelWithDebInfo
+          package: 'true'
+
+      - name: Record build provenance and checksums
+        run: |
+          "Commit: ${{ github.sha }}`nRepository: ${{ github.repository }}`nOBS: 32.0.4 or later`nArchitecture: Windows x64`nUnsigned fork test build" | Set-Content release/BUILD-INFO.txt
+          Get-ChildItem release -File | Where-Object { $_.Extension -in '.zip', '.exe' } | ForEach-Object {
+            $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLower())  $($_.Name)"
+          } | Set-Content release/SHA256SUMS.txt
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-ptz-soft-ptz-fixed-windows-x64-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            release/*-windows-x64.zip
+            release/*-windows-x64-Installer.exe
+            release/BUILD-INFO.txt
+            release/SHA256SUMS.txt
+            release/soft-ptz-test-results.xml
+
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-soft-ptz-test-diagnostics-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            release/soft-ptz-test-results.xml
+            work/test-results/
+            obs-test/config/obs-studio/logs/
+            obs-test/config/obs-studio/crashes/

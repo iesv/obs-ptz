@@ -1201,7 +1201,10 @@ void ptz_filter_add(void *data, obs_source_t *parent)
 		return;
 	ptz->setParentSource(parent);
 	/* Attaching to a source doesn't fire a scene change, so force a refresh */
-	QMetaObject::invokeMethod(ptz, [ptz]() { ptz->onSceneChanged(); }, Qt::QueuedConnection);
+	QMetaObject::invokeMethod(ptz, [ptz]() {
+		ptz->claimPresetThumbnails();
+		ptz->onSceneChanged();
+	});
 }
 
 void ptz_filter_remove(void *data, obs_source_t *)
@@ -1432,7 +1435,7 @@ void PTZDevice::setCameraPresets(const QList<QPair<QString, QString>> &presets)
 		return;
 	for (const Preset &old : before)
 		if (presetIndex(old.id) < 0)
-			ptz_thumbnail_remove(old.thumbnail);
+			removePresetThumbnailFile(old.thumbnail);
 	persist();
 	calldata_t cd = {};
 	signalDevice("ptz_preset_list_reset", &cd);
@@ -1478,7 +1481,7 @@ void PTZDevice::setPresetThumbnail(const QString &id, const QImage &image)
 	QString name = ptz_thumbnail_write(image, filter ? QString::fromUtf8(obs_source_get_uuid(filter)) : QString());
 	if (name.isEmpty())
 		return;
-	ptz_thumbnail_remove(m_presets[index].thumbnail);
+	removePresetThumbnailFile(m_presets[index].thumbnail);
 	m_presets[index].thumbnail = name;
 	persist();
 	signalPresetThumbnail(id);
@@ -1489,7 +1492,7 @@ void PTZDevice::clearPresetThumbnail(const QString &id)
 	int index = presetIndex(id);
 	if (index < 0 || m_presets.at(index).thumbnail.isEmpty())
 		return;
-	ptz_thumbnail_remove(m_presets.at(index).thumbnail);
+	removePresetThumbnailFile(m_presets.at(index).thumbnail);
 	m_presets[index].thumbnail.clear();
 	persist();
 	signalPresetThumbnail(id);
@@ -1503,6 +1506,51 @@ void PTZDevice::capturePresetThumbnail(const QString &id)
 	if (!src)
 		return;
 	ptz_capture_source_thumbnail(src, this, [this, id](QImage image) { setPresetThumbnail(id, image); });
+}
+
+void PTZDevice::claimPresetThumbnails()
+{
+	OBSSourceAutoRelease filter = filterSource();
+	if (!filter || ptz_source_is_private_copy(filter))
+		return;
+	QString owner = QString::fromUtf8(obs_source_get_uuid(filter));
+	QStringList changed;
+	for (Preset &preset : m_presets) {
+		if (preset.thumbnail.isEmpty() || ptz_thumbnail_owner(preset.thumbnail) == owner)
+			continue;
+		QString oldPath = ptz_thumbnail_path(preset.thumbnail);
+		QString name = ptz_thumbnail_new_name(owner, QFileInfo(oldPath).suffix());
+		if (!QFile::copy(oldPath, ptz_thumbnail_path(name))) {
+			blog(LOG_WARNING, "[obs-ptz] could not copy inherited preset thumbnail %s",
+			     QT_TO_UTF8(oldPath));
+			continue;
+		}
+		preset.thumbnail = name;
+		changed.append(preset.id);
+	}
+	if (!changed.isEmpty()) {
+		persist();
+		for (const QString &id : changed)
+			signalPresetThumbnail(id);
+	}
+}
+
+void PTZDevice::removePresetThumbnailFile(const QString &name) const
+{
+	OBSSourceAutoRelease filter = filterSource();
+	if (!filter || ptz_source_is_private_copy(filter) ||
+	    ptz_thumbnail_owner(name) != QString::fromUtf8(obs_source_get_uuid(filter)))
+		return;
+	/* A copy that could not copy its files still needs the old image.
+	 * The startup sweep collects files once no saved collection uses them. */
+	for (const PTZDevice *device : module_devices()) {
+		if (device == this)
+			continue;
+		for (const Preset &preset : device->m_presets)
+			if (preset.thumbnail == name)
+				return;
+	}
+	ptz_thumbnail_remove(name);
 }
 
 void PTZDevice::cancelRecall()
@@ -1757,7 +1805,7 @@ void PTZDevice::deletePreset(const QString &id)
 	int index = presetIndex(id);
 	if (index < 0)
 		return;
-	ptz_thumbnail_remove(m_presets.at(index).thumbnail);
+	removePresetThumbnailFile(m_presets.at(index).thumbnail);
 	m_presets.removeAt(index);
 	m_order.removeAll(id);
 	persist();

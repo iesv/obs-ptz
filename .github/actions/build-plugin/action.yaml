@@ -12,6 +12,10 @@ inputs:
     description: Enable codesigning (macOS only)
     required: false
     default: 'false'
+  tests:
+    description: Build the Windows unit tests and OBS integration test plugins
+    required: false
+    default: 'false'
   codesignIdent:
     description: Developer ID for application codesigning (macOS only)
     required: false
@@ -103,6 +107,9 @@ runs:
         $BuildArgs = @{
           Target = '${{ inputs.target }}'
           Configuration = '${{ inputs.config }}'
+        }
+        if ( '${{ inputs.tests }}' -eq 'true' ) {
+          $BuildArgs.EnableTests = $true
         }
 
         .github/scripts/Build-Windows.ps1 @BuildArgs

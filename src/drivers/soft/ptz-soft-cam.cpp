@@ -176,6 +176,9 @@ void PTZSoftCam::zoom_abs(double pos)
 
 void PTZSoftCam::tickViewport(double seconds)
 {
+	OBSSourceAutoRelease filter = filterSource();
+	if (ptz_source_is_private_copy(filter))
+		return;
 	std::lock_guard<std::mutex> lock(m_lock);
 	m_viewport.tick(seconds);
 }
@@ -195,6 +198,9 @@ gs_texrender_t *PTZSoftCam::texrender()
 
 void PTZSoftCam::reportPosition()
 {
+	OBSSourceAutoRelease filter = filterSource();
+	if (ptz_source_is_private_copy(filter))
+		return;
 	SoftPosition pos;
 	bool moving;
 	{
@@ -311,7 +317,9 @@ void ptz_soft_cam_register_filter()
 	struct obs_source_info info = {};
 	info.id = "ca.secretlab.obs-ptz.soft-ptz";
 	info.type = OBS_SOURCE_TYPE_FILTER;
-	info.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_DO_NOT_DUPLICATE;
+	/* A source copy needs its own filter: sharing one reparents the original
+	 * and leaves it without a target when the copy is destroyed. */
+	info.output_flags = OBS_SOURCE_VIDEO;
 	info.get_name = [](void *) -> const char * {
 		return "Soft PTZ Control";
 	};

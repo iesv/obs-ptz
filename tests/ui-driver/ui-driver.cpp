@@ -215,6 +215,19 @@ void obs_module_post_load(void)
 		heldSources.emplace_back(source.Get());
 		return QJsonObject{};
 	});
+	addRequest("duplicate_source", [](const QJsonObject &request) {
+		OBSSourceAutoRelease source = obs_get_source_by_name(request["name"].toString().toUtf8().constData());
+		OBSSourceAutoRelease sceneSource =
+			obs_get_source_by_name(request["scene"].toString().toUtf8().constData());
+		obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr;
+		if (!source || !scene)
+			return error("not_found", "source or scene not found");
+		OBSSourceAutoRelease copy =
+			obs_source_duplicate(source, request["copy"].toString().toUtf8().constData(), false);
+		if (!copy || !obs_scene_add(scene, copy))
+			return error("not_found", "could not duplicate source");
+		return QJsonObject{};
+	});
 	addReadingRequests();
 	addActionRequests();
 	obs_frontend_add_event_callback(frontendEvent, nullptr);

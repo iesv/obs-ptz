@@ -27,3 +27,4 @@ __pycache__/
 /.deps
 /build_*
 /release
+/dist/

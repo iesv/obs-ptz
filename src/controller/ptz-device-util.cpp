@@ -26,6 +26,14 @@ bool ptz_source_is_device(obs_source_t *source)
 	return usable;
 }
 
+bool ptz_source_is_private_copy(obs_source_t *source)
+{
+	if (!source || obs_source_get_type(source) != OBS_SOURCE_TYPE_FILTER)
+		return false;
+	obs_source_t *parent = obs_filter_get_parent(source);
+	return !parent || obs_obj_is_private(parent);
+}
+
 obs_source_t *ptz_device_create_filter(obs_source_t *parent, obs_data_t *config)
 {
 	const char *kind = obs_data_get_string(config, "kind");

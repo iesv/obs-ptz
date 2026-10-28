@@ -933,6 +933,8 @@ void PTZListModel::deviceCreated(OBSWeakSource weakSource)
 	OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
 	if (!source)
 		return;
+	if (ptz_source_is_private_copy(source))
+		return;
 	/* A filter can be added to a source more than once */
 	QString uuid = QString::fromUtf8(obs_source_get_uuid(source));
 	if (rowByUuid.contains(uuid))
