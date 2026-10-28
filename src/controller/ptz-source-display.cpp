@@ -36,7 +36,7 @@ PTZSourceDisplay::~PTZSourceDisplay()
 	/* The display waits for a draw in progress when it goes, and must go
 	 * before what the draw callback reads, which is members of this class,
 	 * does: OBSQTDisplay would only do it after they are gone. */
-	DestroyDisplay();
+	DestroyDisplay(true);
 	releaseShowing();
 }
 

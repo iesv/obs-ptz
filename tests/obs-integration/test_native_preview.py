@@ -22,6 +22,7 @@ def test_native_text_preview_after_preset_capture_and_surface_recreation(obs_wor
     source = "native-preview-text"
     scene = obs_world.create_scene()
     measurements = []
+    was_studio = obs_world.ws.call("GetStudioModeEnabled")["studioModeEnabled"]
     obs_world.ws.call("CreateInput", {
         "sceneName": scene, "inputName": source, "inputKind": "text_gdiplus_v3",
         "inputSettings": {"text": "aaaaa", "font": {"face": "Arial", "size": 120},
@@ -71,3 +72,4 @@ def test_native_text_preview_after_preset_capture_and_surface_recreation(obs_wor
         (tmp_path / "native-preview-metrics.json").write_text(json.dumps(measurements, indent=2))
         obs_world.ui.invoke(SETTINGS_DIALOG, method="hide")
         obs_world.ws.call("RemoveInput", {"inputName": source})
+        obs_world.ws.call("SetStudioModeEnabled", {"studioModeEnabled": was_studio})
