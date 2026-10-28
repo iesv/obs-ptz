@@ -27,6 +27,7 @@ import time
 import zlib
 
 import pytest
+from conftest import OBS_MAIN, PTZ_DOCK
 
 FILTER_KIND = "ca.secretlab.obs-ptz.soft-ptz"
 # Removing a source is not at once, so each test makes its own by a new name
@@ -529,6 +530,30 @@ def test_a_duplicate_owns_its_thumbnails(obs_world, soft_cam):
     obs_world.call_proc(copy, "ptz_preset_delete", {"id": preset})
     assert thumbnail_image(obs_world, soft_cam, preset) == original
     obs_world.ws.call("RemoveInput", {"inputName": copy})
+
+
+def test_a_removed_source_retained_by_another_plugin_is_not_a_device(obs_world, soft_cam):
+    """Removing a source must immediately remove its controllable device.
+
+    Keep a strong reference in the UI test plugin, just as an output, undo
+    history or screenshot consumer can. Waiting for source destruction would
+    leave an empty camera row and a stale websocket device until that other
+    component releases its reference. Check both public controller surfaces.
+    """
+    obs_world.need_ui_driver()
+    copy = f"soft-ptz-retained-{next(_names)}"
+    obs_world.ui.call("duplicate_source", name=soft_cam, copy=copy, scene=obs_world.create_scene())
+    obs_world.wait_for(lambda: obs_world.device_uuid(copy), timeout=10)
+    uuid = obs_world.device_uuid(copy)
+    obs_world.ui.hold_source(copy)
+    obs_world.ws.call("RemoveInput", {"inputName": copy})
+
+    def removed():
+        devices = obs_world.ws.vendor("obs-ptz", "ptz_list_devices")["devices"]
+        rows, _, _ = obs_world.ui.rows(OBS_MAIN, PTZ_DOCK, "deviceList", roles=["uuid"])
+        return uuid not in {d["device"] for d in devices} and uuid not in {row["uuid"] for row in rows}
+
+    obs_world.wait_for(removed)
 
 
 def test_a_text_source_keeps_its_presets_and_picture(obs_world, tmp_path):

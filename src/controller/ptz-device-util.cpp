@@ -28,6 +28,10 @@ bool ptz_source_is_device(obs_source_t *source)
 
 bool ptz_source_is_private_copy(obs_source_t *source)
 {
+	/* OBS can retain a removed source for an undo entry, a screenshot or
+	 * another plugin. Its object being alive does not make it controllable. */
+	if (source && obs_source_removed(source))
+		return true;
 	if (!source || obs_source_get_type(source) != OBS_SOURCE_TYPE_FILTER)
 		return false;
 	/* A private filter is not necessarily a private device: public inputs
@@ -35,7 +39,7 @@ bool ptz_source_is_private_copy(obs_source_t *source)
 	 * instance is a temporary Studio Mode render copy. A null parent covers
 	 * the interval between creation and attachment, and detached filters. */
 	obs_source_t *parent = obs_filter_get_parent(source);
-	return !parent || obs_obj_is_private(parent);
+	return !parent || obs_source_removed(parent) || obs_obj_is_private(parent);
 }
 
 obs_source_t *ptz_device_create_filter(obs_source_t *parent, obs_data_t *config)

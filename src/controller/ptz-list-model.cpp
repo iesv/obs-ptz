@@ -75,6 +75,45 @@ static void filter_add_cb(void *data, calldata_t *cd)
 	consider_source(static_cast<PTZListModel *>(data), static_cast<obs_source_t *>(calldata_ptr(cd, "filter")));
 }
 
+/* Removal and destruction are different events: a settings view, screenshot
+ * or another plugin can keep a removed source alive. Drop the device row at
+ * removal instead of waiting for the last reference to disappear. Queue only
+ * its UUID, not a strong source reference, and never reset Qt models inside
+ * an OBS source/filter signal or enumeration lock. deviceDestroyed() is
+ * idempotent when the later destroy notification eventually arrives. */
+static void forget_source(PTZListModel *model, obs_source_t *source)
+{
+	if (!source || !ptz_source_is_device(source))
+		return;
+	QString uuid = QString::fromUtf8(obs_source_get_uuid(source));
+	QMetaObject::invokeMethod(model, [model, uuid] { model->deviceDestroyed(uuid); }, Qt::QueuedConnection);
+}
+
+static void source_remove_cb(void *data, calldata_t *cd)
+{
+	auto source = static_cast<obs_source_t *>(calldata_ptr(cd, "source"));
+	if (!source || obs_obj_is_private(source))
+		return;
+	auto model = static_cast<PTZListModel *>(data);
+	forget_source(model, source);
+	obs_source_enum_filters(
+		source,
+		[](obs_source_t *, obs_source_t *filter, void *context) {
+			forget_source(static_cast<PTZListModel *>(context), filter);
+		},
+		model);
+}
+
+static void filter_remove_cb(void *data, calldata_t *cd)
+{
+	auto parent = static_cast<obs_source_t *>(calldata_ptr(cd, "source"));
+	/* A private program copy going away must not remove the public camera
+	 * row of a hardware filter that OBS may have shared with that copy. */
+	if (parent && obs_obj_is_private(parent))
+		return;
+	forget_source(static_cast<PTZListModel *>(data), static_cast<obs_source_t *>(calldata_ptr(cd, "filter")));
+}
+
 /* The source, and with it the device, is being destroyed: a source's own
  * "destroy" signal, whose calldata names the source as "source" */
 static void filter_destroy_cb(void *data, calldata_t *cd)
@@ -158,6 +197,8 @@ PTZListModel::PTZListModel() : QAbstractItemModel()
 	signal_handler_t *global = obs_get_signal_handler();
 	signal_handler_connect(global, "source_create", source_create_cb, this);
 	signal_handler_connect(global, "source_filter_add", filter_add_cb, this);
+	signal_handler_connect(global, "source_remove", source_remove_cb, this);
+	signal_handler_connect(global, "source_filter_remove", filter_remove_cb, this);
 	ptz_backup_store_start();
 }
 
@@ -166,6 +207,8 @@ PTZListModel::~PTZListModel()
 	signal_handler_t *global = obs_get_signal_handler();
 	signal_handler_disconnect(global, "source_create", source_create_cb, this);
 	signal_handler_disconnect(global, "source_filter_add", filter_add_cb, this);
+	signal_handler_disconnect(global, "source_remove", source_remove_cb, this);
+	signal_handler_disconnect(global, "source_filter_remove", filter_remove_cb, this);
 	ptz_backup_store_stop();
 }
 

@@ -61,6 +61,7 @@ extern bool ptz_source_is_device(obs_source_t *source);
  * the public source is edited in preview. Its copied PTZ filter must not become
  * another camera in the dock, websocket device list or backup store.
  *
+ * Removed sources are unavailable even while another component retains them.
  * Test the PARENT's privacy: OBS filters themselves are normally private even
  * when attached to a public source. An unattached filter is also excluded until
  * it has a parent. Standalone discovery sources are deliberately unaffected. */

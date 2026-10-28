@@ -103,7 +103,12 @@ def test_source_copy_preset_and_transition_soak(obs_world, duplicating_studio_mo
                 obs_world.call_proc(copy, "ptz_preset_delete", {"id": preset})
                 assert thumbnail_image(obs_world, source, preset)
                 obs_world.ws.call("RemoveInput", {"inputName": copy})
-                obs_world.wait_for(lambda: devices() == expected_devices)
+                try:
+                    obs_world.wait_for(lambda: devices() == expected_devices)
+                except AssertionError:
+                    print("Expected device UUIDs:", sorted(expected_devices), flush=True)
+                    print("Actual device entries:", obs_world.ws.vendor("obs-ptz", "ptz_list_devices"), flush=True)
+                    raise
             obs_world.ws.call("SetCurrentPreviewScene", {
                 "sceneName": camera_scene if index % 2 else other_scene,
             })
