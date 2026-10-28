@@ -68,6 +68,22 @@ jobs:
           python -m pytest tests/obs-integration -v --maxfail=3 --junitxml=release/soft-ptz-test-results.xml --basetemp=work/test-results
           if ($LASTEXITCODE -ne 0) { throw 'OBS regression tests failed' }
 
+      - name: Run USB backend and worker tests
+        run: |
+          $qt = Get-ChildItem .deps -Recurse -Filter Qt6Core.dll | Select-Object -First 1
+          if (!$qt) { throw 'Qt runtime not found' }
+          $env:PATH = "$($qt.Directory.FullName);$env:PATH"
+          & ./build_x64/tests/usb-backend/RelWithDebInfo/usb-backend-tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'USB backend unit tests failed' }
+
+      - name: Run repeated source, preset and transition stress tests
+        env:
+          PTZ_STRESS: '1'
+          PTZ_STRESS_CYCLES: '100'
+        run: |
+          python -m pytest tests/obs-integration/test_soft_ptz_stress.py -v -s --maxfail=1 --junitxml=release/stress-test-results.xml --basetemp=work/stress-results
+          if ($LASTEXITCODE -ne 0) { throw 'Stress tests failed' }
+
       - name: Package Windows ZIP and installer
         uses: ./.github/actions/package-plugin
         with:
@@ -94,6 +110,7 @@ jobs:
             release/BUILD-INFO.txt
             release/SHA256SUMS.txt
             release/soft-ptz-test-results.xml
+            release/stress-test-results.xml
 
       - name: Upload test diagnostics
         if: always()
@@ -104,6 +121,8 @@ jobs:
           path: |
             release/soft-ptz-test-results.xml
             work/test-results/
+            work/stress-results/
+            release/stress-test-results.xml
             obs-test/config/obs-studio/logs/
             obs-test/config/obs-studio/crashes/
             build_x64/rundir/RelWithDebInfo/*.dll

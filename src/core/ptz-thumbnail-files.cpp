@@ -10,6 +10,7 @@
 #include <graphics/graphics.h>
 #include <graphics/vec4.h>
 #include <memory>
+#include <algorithm>
 #include <QDir>
 #include <QFileInfo>
 #include <QPointer>
@@ -87,8 +88,10 @@ QImage renderSource(obs_source_t *source)
 	if (!srcWidth || !srcHeight)
 		return QImage();
 
-	uint32_t width = qMin<uint32_t>(PTZ_THUMBNAIL_WIDTH, srcWidth);
-	uint32_t height = qMax<uint32_t>(1, (uint64_t)width * srcHeight / srcWidth);
+	uint32_t longest = std::max(srcWidth, srcHeight);
+	uint32_t limit = std::min<uint32_t>(PTZ_THUMBNAIL_WIDTH, longest);
+	uint32_t width = std::max<uint32_t>(1, (uint64_t)srcWidth * limit / longest);
+	uint32_t height = std::max<uint32_t>(1, (uint64_t)srcHeight * limit / longest);
 
 	QImage image;
 	obs_enter_graphics();

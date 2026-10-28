@@ -11,13 +11,14 @@
 ViscaTCPTransport::ViscaTCPTransport(bool dvip) : dvip(dvip), port(default_port())
 {
 	visca_socket.setSocketOption(QAbstractSocket::KeepAliveOption, 1);
+	visca_socket.setReadBufferSize(65536);
 	connect(&visca_socket, &QTcpSocket::readyRead, this, &ViscaTCPTransport::poll);
 	connect(&visca_socket, &QTcpSocket::stateChanged, this, &ViscaTCPTransport::on_socket_stateChanged);
 }
 
 void ViscaTCPTransport::connectSocket()
 {
-	if (!effectiveHost().isEmpty())
+	if (!effectiveHost().isEmpty() && visca_socket.state() == QAbstractSocket::UnconnectedState)
 		visca_socket.connectToHost(effectiveHost(), port);
 }
 
@@ -111,6 +112,8 @@ void ViscaTCPTransport::poll()
 		return;
 	}
 	for (auto b : visca_socket.readAll()) {
+		if (rxbuffer.size() >= 65536)
+			rxbuffer.clear();
 		rxbuffer += b;
 		if ((b & 0xff) == 0xff) {
 			if (rxbuffer.size())
@@ -133,6 +136,8 @@ void ViscaTCPTransport::setSourceHost(const QString &new_host)
 
 void ViscaTCPTransport::update(OBSData config)
 {
+	QString oldHost = host;
+	int oldPort = port;
 	host = obs_data_get_string(config, "host");
 	port = (int)obs_data_get_int(config, "tcp_port");
 	if (!port)
@@ -140,6 +145,8 @@ void ViscaTCPTransport::update(OBSData config)
 	if (!port)
 		port = default_port();
 
+	if (host != oldHost || port != oldPort)
+		visca_socket.abort();
 	connectSocket();
 }
 

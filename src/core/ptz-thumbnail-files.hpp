@@ -12,8 +12,7 @@
 #include <QObject>
 #include <QString>
 
-/* Width in pixels of a stored preset thumbnail; the height follows the
- * captured source's aspect ratio */
+/* Maximum edge in pixels of a stored thumbnail, keeping its aspect ratio */
 static constexpr int PTZ_THUMBNAIL_WIDTH = 192;
 
 /* Directory the thumbnail image files live in. Only created when a

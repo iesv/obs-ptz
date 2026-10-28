@@ -50,7 +50,7 @@ function Build {
 
     $CmakeArgs = @('--preset', "windows-ci-${Target}")
     if ( $EnableTests ) {
-        $CmakeArgs += @('-DENABLE_UI_TESTS=ON', '-DENABLE_SOFT_PTZ_TESTS=ON', '-DENABLE_UNIT_TESTS=ON')
+        $CmakeArgs += @('-DENABLE_UI_TESTS=ON', '-DENABLE_SOFT_PTZ_TESTS=ON', '-DENABLE_UNIT_TESTS=ON', '-DENABLE_USB_TESTS=ON')
     }
 
     # CMakePresets.json pins the "Visual Studio 17 2022" generator. Runner

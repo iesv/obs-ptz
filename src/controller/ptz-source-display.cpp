@@ -21,8 +21,10 @@ PTZSourceDisplay::PTZSourceDisplay(QWidget *parent) : OBSQTDisplay(parent)
 	/* The display is made once the window is on screen, and again if it
 	 * moves to another screen, so each time it is made is when to say what
 	 * draws into it */
-	connect(this, &OBSQTDisplay::DisplayCreated, this,
-		[this]() { obs_display_add_draw_callback(GetDisplay(), draw, this); });
+	connect(this, &OBSQTDisplay::DisplayCreated, this, [this]() {
+		obs_display_add_draw_callback(GetDisplay(), draw, this);
+		obs_display_set_enabled(GetDisplay(), isVisible());
+	});
 }
 
 PTZSourceDisplay::~PTZSourceDisplay()
@@ -64,11 +66,24 @@ void PTZSourceDisplay::showEvent(QShowEvent *event)
 	OBSQTDisplay::showEvent(event);
 	watchAncestors();
 	syncNativeGeometry();
+	{
+		std::lock_guard<std::mutex> guard(m_lock);
+		OBSSourceAutoRelease source = obs_weak_source_get_source(m_source);
+		if (source && !m_showing) {
+			obs_source_inc_showing(source);
+			m_showing = true;
+		}
+	}
+	if (GetDisplay())
+		obs_display_set_enabled(GetDisplay(), true);
 }
 
 void PTZSourceDisplay::hideEvent(QHideEvent *event)
 {
 	OBSQTDisplay::hideEvent(event);
+	if (GetDisplay())
+		obs_display_set_enabled(GetDisplay(), false);
+	releaseShowing();
 	unwatchAncestors();
 }
 
@@ -132,7 +147,7 @@ void PTZSourceDisplay::setSource(OBSSource source)
 		return;
 	releaseShowingLocked();
 	m_source = weak;
-	if (source) {
+	if (source && isVisible()) {
 		obs_source_inc_showing(source);
 		m_showing = true;
 	}

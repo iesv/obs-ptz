@@ -2161,6 +2161,7 @@ def obs_world(request, tmp_path_factory, ptzsim_process, sony_ptzsim, birddog_pt
         world.config_dir = obs_config_root(home) / "plugin_config" / "obs-ptz"
         world.restart_obs = restart_obs
         world.obs_log = lambda: running["log"]
+        world.obs_process = lambda: running["proc"]
         world.first_run_leaks = first_run
         # Settled before a test can end the session, as restart_obs() does for
         # a restart: an OBS that quits before its camera has been turned on

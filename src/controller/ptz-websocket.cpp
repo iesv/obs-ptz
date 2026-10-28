@@ -40,10 +40,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstring>
 #include <functional>
 #include <map>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -312,13 +314,15 @@ bool fillCalldata(const ptzws::Decl &decl, obs_data_t *request, calldata_t *cd, 
 			break;
 		case ptzws::Type::Float:
 			/* A whole number is one too: JSON has no way to say 1.0 */
-			ok = type == OBS_DATA_NUMBER;
+			ok = type == OBS_DATA_NUMBER && std::isfinite(obs_data_item_get_double(item));
 			if (ok)
 				calldata_set_float(cd, key.c_str(), obs_data_item_get_double(item));
 			break;
 		case ptzws::Type::Int: {
 			double value = type == OBS_DATA_NUMBER ? obs_data_item_get_double(item) : 0.5;
-			ok = type == OBS_DATA_NUMBER && value == (double)(long long)value;
+			const double min = (double)std::numeric_limits<long long>::min();
+			ok = type == OBS_DATA_NUMBER && std::isfinite(value) && value >= min && value < -min &&
+			     value == (double)(long long)value;
 			if (ok)
 				calldata_set_int(cd, key.c_str(), (long long)value);
 			break;
