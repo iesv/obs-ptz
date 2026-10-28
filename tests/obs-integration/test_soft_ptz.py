@@ -220,7 +220,17 @@ def test_a_relative_move_adds(obs_world, soft_cam, tmp_path):
     wait_for_position(obs_world, soft_cam, tmp_path, pan=0.3, tilt=0.0)
 
 
-def test_a_local_preset_round_trips(obs_world, soft_cam, tmp_path):
+@pytest.mark.parametrize("recall_seconds", [0.0, 0.2])
+def test_a_local_preset_round_trips(obs_world, soft_cam, tmp_path, recall_seconds):
+    """Both immediate and animated recalls must retain the requested pan.
+
+    The driver receives pan/tilt before zoom. Starting from the whole frame
+    catches an immediate recall that accidentally replaces the raw pan target
+    with the currently clamped, zero-offset position between those calls.
+    """
+    obs_world.ws.call("SetSourceFilterSettings", {
+        "sourceName": soft_cam, "filterName": "Soft PTZ", "filterSettings": {"recall_seconds": recall_seconds},
+    })
     # Pan before zoom is the order a recall applies them in, from the whole frame
     move(obs_world, soft_cam, pan=0.5, tilt=-0.25, zoom=0.75)
     wait_for_position(obs_world, soft_cam, tmp_path, pan=0.5, tilt=-0.25, zoom=0.75)

@@ -174,8 +174,14 @@ private:
 	SoftPosition m_from, m_to;
 	double m_elapsed = 0;
 
-	/* What an eased move in progress is going to, or where the viewport is shown */
-	SoftPosition easeTarget() const { return m_easing ? m_to : position(); }
+	/* Preserve the commanded target when another axis is added to a move.
+	 * position() clamps pan/tilt to the currently visible zoom range; using
+	 * it here discards a pan command issued just before the zoom that makes
+	 * room for it. That especially breaks a zero-duration preset, where the
+	 * pan command has already completed before moveZoomTo() follows it.
+	 * m_pos intentionally retains the raw target, while position() remains
+	 * the bounded value returned to callers and used for drawing. */
+	SoftPosition easeTarget() const { return m_easing ? m_to : m_pos; }
 	void ease(SoftPosition target)
 	{
 		if (!std::isfinite(target.pan) || !std::isfinite(target.tilt) || !std::isfinite(target.zoom))

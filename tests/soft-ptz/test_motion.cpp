@@ -218,6 +218,24 @@ TEST_CASE("SoftViewport eased moves", "[motion]")
 
 TEST_CASE("SoftViewport commands that take each other over", "[motion]")
 {
+	SECTION("an instant pan survives the following zoom command")
+	{
+		SoftViewport vp = zoomedIn(0.0);
+		SoftViewportConfig config = vp.config();
+		config.recallSeconds = 0;
+		vp.setConfig(config);
+		// A preset dispatches axes separately. The public position must stay
+		// in frame before zooming, without erasing the requested pan/tilt.
+		vp.movePanTiltTo(0.6, -0.5);
+		CHECK(vp.position().pan == Approx(0.0));
+		CHECK(vp.position().tilt == Approx(0.0));
+		vp.moveZoomTo(1.0);
+		CHECK(vp.position().pan == Approx(0.6));
+		CHECK(vp.position().tilt == Approx(-0.5));
+		CHECK(vp.position().zoom == Approx(1.0));
+		CHECK_FALSE(vp.moving());
+	}
+
 	SECTION("a speed ends an eased move")
 	{
 		SoftViewport vp = zoomedIn(1.0);

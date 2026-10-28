@@ -35,6 +35,16 @@ jobs:
           config: RelWithDebInfo
           tests: 'true'
 
+      - name: Upload compiled test tools
+        # Make the exact binaries available before the longer suite finishes,
+        # allowing real-GPU checks to run in parallel with hosted-runner tests.
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-ptz-test-tools-${{ github.sha }}
+          path: |
+            build_x64/rundir/RelWithDebInfo/*.dll
+            release/RelWithDebInfo/obs-ptz/
+
       - name: Run viewport and lifecycle unit tests
         run: |
           & ./build_x64/tests/soft-ptz/RelWithDebInfo/soft-ptz-tests.exe

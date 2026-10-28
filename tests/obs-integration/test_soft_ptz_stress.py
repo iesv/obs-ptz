@@ -139,6 +139,11 @@ def test_onvif_request_soak(obs_world, onvif_device, tmp_path):
     batches warm network pools and XML/Qt allocations before RSS is compared.
     This covers the completed-QNetworkReply lifetime during sustained use.
     """
+    # Connected can be reported by the initial clock request. A reported PTZ
+    # position additionally proves that service/profile discovery is complete,
+    # so no early refresh is dropped for lack of an initialized service URL.
+    obs_world.wait_for_device_state(onvif_device, tmp_path / "onvif-ready.json",
+                                   lambda result: "pan" in result["state"], timeout=20)
     process = psutil.Process(obs_world.obs_process().pid)
     samples = []
     started = time.monotonic()
