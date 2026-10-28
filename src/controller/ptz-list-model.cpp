@@ -8,6 +8,7 @@
 #include <obs.hpp>
 #include <algorithm>
 #include <climits>
+#include <cstring>
 #include <qt-wrappers.hpp>
 #include <QPixmap>
 #include <QPixmapCache>
@@ -343,13 +344,14 @@ void PTZListModel::refreshDeviceState(PTZDeviceEntry *entry)
 		entry->name = parent ? QT_UTF8(obs_source_get_name(parent)) : QString();
 	}
 	entry->connected = obs_data_get_bool(state, "connected");
-	/* A device can come to be on another source, or on its first, without
-	 * the scene changing. Being locked follows being live, so a device that
-	 * has just gone live is locked. */
+	/* A device can acquire its first parent without a scene-change event.
+	 * Apply the same policy in this path: live physical cameras lock, while
+	 * software PTZ stays editable instead of inheriting a physical-camera
+	 * safety lock simply because its input is in the Program scene. */
 	bool wasLive = entry->live;
 	refreshSceneState(entry);
 	if (entry->live != wasLive)
-		entry->locked = entry->live;
+		entry->locked = entry->live && entry->lockOnLive;
 	entry->poweredOff = obs_data_has_user_value(state, "power_on") && !obs_data_get_bool(state, "power_on");
 	entry->features.reset();
 	if (obs_data_has_user_value(state, "features")) {
@@ -806,7 +808,7 @@ void PTZListModel::onSceneChanged()
 		auto &entry = devices[row];
 		bool wasLocked = entry.locked;
 		bool changed = refreshSceneState(&entry);
-		entry.locked = entry.live;
+		entry.locked = entry.live && entry.lockOnLive;
 		if (changed || entry.locked != wasLocked)
 			emit dataChanged(index(row, 0), index(row, 0));
 	}
@@ -1015,6 +1017,10 @@ void PTZListModel::deviceCreated(OBSWeakSource weakSource)
 	/* Kept, since once the source is destroyed there is no asking it */
 	entry.uuid = uuid;
 	entry.weakSource = weakSource;
+	/* A filter's kind is stable for its lifetime. Cache this once rather
+	 * than retaining a source or looking up its id on every model paint.
+	 * Third-party/physical devices retain the existing protective default. */
+	entry.lockOnLive = strcmp(obs_source_get_id(source), "ca.secretlab.obs-ptz.soft-ptz") != 0;
 	int row = rowForNewDevice(uuid);
 	devices.insert(row, entry);
 	rebuildRowIndex();

@@ -59,9 +59,13 @@ private:
 		bool preview = false;
 		/* Only when the camera says it is, not when it doesn't say */
 		bool poweredOff = false;
-		/* Movement from the UI is refused. A property of the UI, not the
-		 * device: it follows live at each scene change, and in between a
-		 * user can lock or unlock it */
+		/* Physical cameras lock automatically when they go live. Software
+		 * PTZ remains editable by default; users can still toggle its padlock
+		 * until the next scene change resets the automatic lock policy. This
+		 * is cached from the source kind, not exposed as a device API field. */
+		bool lockOnLive = true;
+		/* Movement from the UI is refused while locked. A UI policy only;
+		 * it does not change the device's own movement/proc implementation. */
 		bool locked = false;
 		/* The names in its state's "features", or nothing if it has none:
 		 * a device from before there were, which can do anything */
@@ -137,7 +141,9 @@ public:
 	Qt::DropActions supportedDropActions() const override;
 	/* The program or preview scene, or Studio Mode, changed: every device
 	 * is in the program scene, the preview scene, both or neither anew, and
-	 * locked if it is live, whatever a user had locked or unlocked */
+	 * locked according to its live-lock policy. Soft PTZ is automatically
+	 * unlocked; physical cameras lock while live. Manual overrides last
+	 * until this next scene change, as before. */
 	void onSceneChanged();
 
 	/* The uuids of the devices in the order of the camera list, which is the order to save for

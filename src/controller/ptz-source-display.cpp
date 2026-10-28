@@ -218,7 +218,18 @@ void PTZSourceDisplay::draw(void *param, uint32_t cx, uint32_t cy)
 	const bool previous = gs_set_linear_srgb(true);
 	gs_ortho(0.0f, float(sourceCX), 0.0f, float(sourceCY), -100.0f, 100.0f);
 	gs_set_viewport(x, y, newCX, newCY);
+	/* Display callbacks share blend state as well as transforms. In
+	 * particular, a previous opaque pass may have disabled blending or used
+	 * ONE/ZERO. OBS sources use premultiplied alpha: composite transparent
+	 * text and filtered textures over the display background, rather than
+	 * letting invisible RGB values replace it with a solid rectangle. Restore
+	 * every blend setting afterwards so this preview cannot affect another
+	 * display or capture pass in the shared graphics context. */
+	gs_blend_state_push();
+	gs_enable_blending(true);
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
 	obs_source_video_render(source);
+	gs_blend_state_pop();
 	gs_set_linear_srgb(previous);
 	gs_matrix_pop();
 	gs_projection_pop();

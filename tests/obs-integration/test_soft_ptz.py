@@ -28,6 +28,7 @@ import zlib
 
 import pytest
 from conftest import OBS_MAIN, PTZ_DOCK
+from test_filter_devices import make_program, studio_mode
 
 FILTER_KIND = "ca.secretlab.obs-ptz.soft-ptz"
 # Removing a source is not at once, so each test makes its own by a new name
@@ -193,6 +194,32 @@ def wait_for_corners(world, source, want, timeout=8):
 
 
 # ------------------------------------------------------------- the device
+
+
+def test_soft_ptz_automatically_unlocks_on_scene_changes(obs_world, soft_cam, studio_mode, tmp_path):
+    """Software PTZ should remain editable while a source is in Program.
+
+    Enable the global live-camera protection to prove this is a per-kind
+    policy, rather than disabling protection for the entire application.
+    A manual lock still works, and the next scene change restores Soft PTZ's
+    unlocked default. Physical-camera protection has separate existing tests.
+    """
+    obs_world.set_live_move_lock(True)
+    # soft_cam creates its own scene; identify the actual containing scene
+    # instead of depending on fixture or scene-list ordering.
+    scenes = obs_world.ws.call("GetSceneList")["scenes"]
+    scene = next(s["sceneName"] for s in scenes if any(
+        item["sourceName"] == soft_cam
+        for item in obs_world.ws.call("GetSceneItemList", {"sceneName": s["sceneName"]})["sceneItems"]))
+    make_program(obs_world, scene)
+    obs_world.wait_for_device_source(soft_cam, tmp_path / "device.json",
+                                    lambda d: d["live"] and not d["locked"])
+    obs_world.set_device_locked(soft_cam, True)
+    assert obs_world.device_source(soft_cam, tmp_path / "device.json")["locked"]
+    other = obs_world.create_scene()
+    obs_world.ws.call("SetCurrentPreviewScene", {"sceneName": other})
+    obs_world.wait_for_device_source(soft_cam, tmp_path / "device.json",
+                                    lambda d: d["live"] and not d["locked"])
 
 
 def test_an_absolute_move_converges(obs_world, soft_cam, tmp_path):
