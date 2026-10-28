@@ -57,6 +57,7 @@ that could not be done answers `{"error": code, "message": text}`:
 | `count` | `{"watch"}` | `{"count"}`, or `not_found` once the object watched has gone |
 | `hold_source` | `{"name"}` | `{}`. Keeps a reference to the source by that name until the driver unloads, inside OBS's own shutdown, as a plugin with an output on a scene does: the source outlives OBS clearing its scenes as it exits |
 | `duplicate_source` | `{"name", "copy", "scene"}` | `{}`. Duplicates a source into the named scene, as Paste (Duplicate) does |
+| `native_display` | `{"path", "recreate"?: false}` | Windows D3D11 test probe for an `OBSQTDisplay`: reads its actual framebuffer and returns `{"width", "height", "white", "dark"}` pixel fractions. `recreate` instead destroys and recreates the widget's native surface. No source screenshot is substituted for a missing display frame. |
 
 ### Paths
 
