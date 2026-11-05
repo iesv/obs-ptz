@@ -59,6 +59,9 @@ private:
 		bool preview = false;
 		/* Only when the camera says it is, not when it doesn't say */
 		bool poweredOff = false;
+		/* A virtual viewport has no physical camera motion to protect.
+		 * Manual padlock choices still last until the next scene change. */
+		bool lockOnLive = true;
 		/* Movement from the UI is refused. A property of the UI, not the
 		 * device: it follows live at each scene change, and in between a
 		 * user can lock or unlock it */
@@ -137,7 +140,7 @@ public:
 	Qt::DropActions supportedDropActions() const override;
 	/* The program or preview scene, or Studio Mode, changed: every device
 	 * is in the program scene, the preview scene, both or neither anew, and
-	 * locked if it is live, whatever a user had locked or unlocked */
+	 * locked according to its live policy, replacing a manual override */
 	void onSceneChanged();
 
 	/* The uuids of the devices in the order of the camera list, which is the order to save for
