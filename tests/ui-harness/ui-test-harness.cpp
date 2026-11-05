@@ -33,6 +33,7 @@ PTZUITestHarness::PTZUITestHarness(QObject *parent) : QObject(parent)
 	registerDeviceThreadProcsTest(this);
 	registerThirdPartyDeviceTest(this);
 	registerVendorEventTest(this);
+	registerPreviewRenderTest(this);
 }
 
 bool ptzUITestIsDevice(obs_source_t *source)

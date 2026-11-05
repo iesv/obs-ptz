@@ -336,6 +336,7 @@ target_sources(
     src/controller/ptz-camera-report.hpp
     src/controller/ptz-state-view.hpp
     src/controller/ptz-source-display.hpp
+    src/controller/ptz-source-preview-render.hpp
     src/controller/ptz-ws-decl.hpp
     src/controller/ptz-websocket.hpp
     src/controller/obs-websocket-api.h

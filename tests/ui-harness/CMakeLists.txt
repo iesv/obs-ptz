@@ -23,6 +23,7 @@ target_sources(
     device-settings-test.cpp
     device-thread-procs-test.cpp
     discovery-test.cpp
+    preview-render-test.cpp
     third-party-device-test.cpp
     vendor-event-test.cpp
 )

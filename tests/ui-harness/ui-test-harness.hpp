@@ -91,3 +91,4 @@ void registerDiscoveryTest(PTZUITestHarness *harness);
 void registerDeviceThreadProcsTest(PTZUITestHarness *harness);
 void registerThirdPartyDeviceTest(PTZUITestHarness *harness);
 void registerVendorEventTest(PTZUITestHarness *harness);
+void registerPreviewRenderTest(PTZUITestHarness *harness);

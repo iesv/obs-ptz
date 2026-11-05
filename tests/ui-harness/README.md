@@ -9,8 +9,13 @@ driver (`tests/ui-driver/`), and needs nothing of `obs-ptz`'s but
 `src/ptz.h`, for the PTZ API's version: it finds devices as any controller
 of the PTZ API does, from libobs and the devices' own procs
 (`ptzUITestDeviceSource()` and the others in `ui-test-harness.hpp`). The
-plugin that is tested is the plugin that ships. Not CI-integrated (it needs
-a real windowed OBS).
+plugin that is tested is the plugin that ships.
+The Windows contribution workflow runs it in an isolated portable OBS.
+
+The preview graphics regression also compiles the same small render helper
+used by the production widget.
+It deliberately inherits a translated matrix and disabled blending, then
+checks pixels and restored state without adding test hooks to the plugin.
 
 Ships with these tests, each in a `*-test.cpp` file with the pytest module that
 drives it:

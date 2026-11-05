@@ -12,6 +12,7 @@
 #include <QWindow>
 
 #include "ptz-source-display.hpp"
+#include "ptz-source-preview-render.hpp"
 #include "display-helpers.hpp"
 
 PTZSourceDisplay::PTZSourceDisplay(QWidget *parent) : OBSQTDisplay(parent)
@@ -186,28 +187,5 @@ void PTZSourceDisplay::draw(void *param, uint32_t cx, uint32_t cy)
 		std::lock_guard<std::mutex> guard(self->m_lock);
 		source = obs_weak_source_get_source(self->m_source);
 	}
-	if (!source || !cx || !cy)
-		return;
-
-	uint32_t sourceCX = obs_source_get_width(source);
-	uint32_t sourceCY = obs_source_get_height(source);
-	if (!sourceCX || !sourceCY)
-		return;
-
-	int x, y;
-	float scale;
-	GetScaleAndCenterPos(sourceCX, sourceCY, cx, cy, x, y, scale);
-	int newCX = int(scale * float(sourceCX));
-	int newCY = int(scale * float(sourceCY));
-
-	gs_viewport_push();
-	gs_projection_push();
-	/* As OBS's own previews do, or the colors come out wrong */
-	const bool previous = gs_set_linear_srgb(true);
-	gs_ortho(0.0f, float(sourceCX), 0.0f, float(sourceCY), -100.0f, 100.0f);
-	gs_set_viewport(x, y, newCX, newCY);
-	obs_source_video_render(source);
-	gs_set_linear_srgb(previous);
-	gs_projection_pop();
-	gs_viewport_pop();
+	ptz_render_source_preview(source, cx, cy);
 }
