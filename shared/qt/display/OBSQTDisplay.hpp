@@ -26,7 +26,7 @@ signals:
 
 public:
 	OBSQTDisplay(QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
-	~OBSQTDisplay() { display = nullptr; }
+	~OBSQTDisplay() { DestroyDisplay(true); }
 
 	virtual QPaintEngine *paintEngine() const override;
 
@@ -38,10 +38,14 @@ public:
 	void SetDisplayBackgroundColor(const QColor &color);
 	void UpdateDisplayBackgroundColor();
 	void CreateDisplay();
-	void DestroyDisplay()
+	void DestroyDisplay(bool permanent = false)
 	{
+		/* Qt can replace a native surface without destroying its widget.
+		 * Release that surface's swap chain, but let the next paint create
+		 * a replacement. Only C++ teardown permanently forbids creation;
+		 * set its guard before releasing the display and its callbacks. */
+		destroying |= permanent;
 		display = nullptr;
-		destroying = true;
 	};
 
 	void OnMove();

@@ -13,6 +13,14 @@ client is `tests/obs-integration/uidriver.py`.
 
 ## Requests
 
+`native_display` checks an `OBSQTDisplay` named by `path`.
+On Windows with D3D11 it returns the actual framebuffer's `width`,
+`height`, and fractions of `white` and `dark` pixels.
+`recreate: true` instead replaces its native surface, so tests exercise
+surface loss without substituting an independent source screenshot.
+`state: true` instead returns `exists`, `enabled`, and `visible`, including
+while a widget is hidden, on every platform.
+
 The requests are on obs-websocket's vendor `ui-driver`, made with
 `CallVendorRequest`. Each request's data, and each answer, is **one string
 field, `json`, holding a JSON object**: obs-websocket hands a vendor its data
