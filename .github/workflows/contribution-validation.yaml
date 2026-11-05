@@ -20,6 +20,8 @@ jobs:
 
   windows-regressions:
     runs-on: windows-2022
+    env:
+      PTZ_COPY_THUMBNAILS: '1'
     timeout-minutes: 60
     defaults:
       run:

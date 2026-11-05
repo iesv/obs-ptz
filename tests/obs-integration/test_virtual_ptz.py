@@ -554,10 +554,10 @@ def test_a_thumbnail_is_named_for_its_filter(obs_world, virtual_cam):
     assert name.startswith(obs_world.device_uuid(virtual_cam) + "_"), name
 
 
-def test_a_duplicated_source_has_a_device_without_its_thumbnails(obs_world, virtual_cam, tmp_path):
+def test_a_duplicated_source_owns_its_thumbnails(obs_world, virtual_cam, tmp_path):
     """A copy a user makes, as Paste (Duplicate) does, is a device of its own,
-    with its source's presets but not their thumbnails, whose files stay the
-    original's: what the copy does to a preset leaves them alone."""
+    with independent thumbnail files: what the copy does to a preset leaves
+    the original's image readable."""
     obs_world.need_ui_driver()
     preset = obs_world.create_preset(virtual_cam, "pictured", store="local")
     obs_world.wait_for(lambda: thumbnail_image(obs_world, virtual_cam, preset), timeout=10)
@@ -569,7 +569,10 @@ def test_a_duplicated_source_has_a_device_without_its_thumbnails(obs_world, virt
         obs_world.wait_for_device_by_name(copy, tmp_path / "copy.json", lambda r: r["found"] and r["bound"],
                                           timeout=10)
         obs_world.wait_for(lambda: preset in preset_thumbnails(obs_world, copy), timeout=10)
-        assert not preset_thumbnails(obs_world, copy)[preset]
+        copied = preset_thumbnails(obs_world, copy)[preset]
+        assert copied and copied != original
+        assert thumbnail_name(copied).startswith(obs_world.device_uuid(copy) + "_")
+        assert thumbnail_image(obs_world, copy, preset) == thumbnail_image(obs_world, virtual_cam, preset)
 
         obs_world.call_proc(copy, "ptz_preset_delete", {"id": preset})
         obs_world.wait_for(lambda: preset not in preset_thumbnails(obs_world, copy), timeout=10)

@@ -9,7 +9,10 @@
 #include <obs-module.h>
 #include <graphics/graphics.h>
 #include <graphics/vec4.h>
+#include <QFile>
+#include <QFileInfo>
 #include "ptz-virtual.hpp"
+#include "ptz-thumbnail-files.hpp"
 #include "ptz.h"
 
 /* What a setting is limited to, in properties and in update() both */
@@ -185,18 +188,29 @@ VirtualRect PTZVirtual::visibleRect() const
 	return m_viewport.visibleRect();
 }
 
-/* A copy of a camera keeps its presets, but not their thumbnails: the files are
- * the original's, and deleting a preset here would delete them. The array is a
- * new one, as the original's settings hold the same one until they are saved. */
+/* A public copy owns new thumbnail files as well as its own preset objects.
+ * Sharing a file would let deleting a preset on either camera break the other.
+ * Private Studio Mode copies never claim settings or create these files. */
 void PTZVirtualFilter::settingsCopied(obs_data_t *settings)
 {
 	OBSDataArrayAutoRelease presets = obs_data_get_array(settings, "presets");
 	OBSDataArrayAutoRelease own = obs_data_array_create();
+	QString owner = QString::fromUtf8(obs_source_get_uuid(source()));
 	for (size_t i = 0; i < obs_data_array_count(presets); i++) {
 		OBSDataAutoRelease preset = obs_data_array_item(presets, i);
 		OBSDataAutoRelease copy = obs_data_create();
 		obs_data_apply(copy, preset);
 		obs_data_erase(copy, "thumbnail");
+		QString previous = QString::fromUtf8(obs_data_get_string(preset, "thumbnail"));
+		if (!previous.isEmpty()) {
+			QString oldPath = ptz_thumbnail_path(previous);
+			QString name = ptz_thumbnail_new_name(owner, QFileInfo(previous).suffix());
+			QString path = ptz_thumbnail_path(name);
+			if (!oldPath.isEmpty() && !path.isEmpty() && QFile::copy(oldPath, path))
+				obs_data_set_string(copy, "thumbnail", qUtf8Printable(name));
+			/* On failure keep upstream's empty-thumbnail fallback, rather
+			 * than retaining a shared reference that either camera deletes. */
+		}
 		obs_data_array_push_back(own, copy);
 	}
 	obs_data_set_array(settings, "presets", own);
