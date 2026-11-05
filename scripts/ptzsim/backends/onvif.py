@@ -7,7 +7,6 @@ obs-ptz's discovery and command paths, not the WS-Security implementation.
 """
 
 import socket
-import struct
 import sys
 import threading
 import time
@@ -393,15 +392,24 @@ class OnvifBackend(Backend):
 
     def _ws_discovery_loop(self):
         """Listens on the WS-Discovery multicast group and replies to Probes."""
+        # A wildcard socket can reply from a different local interface, notably
+        # on Windows with virtual adapters. Clients use the sender's address
+        # when correcting an unreachable XAddr, so send from the advertised
+        # interface and join that interface's multicast group explicitly.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock, \
+                socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as replies:
+            self._serve_discovery(sock, replies)
+
+    def _serve_discovery(self, sock, replies):
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+            replies.bind((self.host, 0))
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             except (AttributeError, OSError):
                 pass
             sock.bind(("0.0.0.0", WSD_PORT))
-            mreq = struct.pack("4sl", socket.inet_aton(WSD_GROUP), socket.INADDR_ANY)
+            mreq = socket.inet_aton(WSD_GROUP) + socket.inet_aton(self.host)
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
             sock.settimeout(0.5)
         except OSError as e:
@@ -423,7 +431,7 @@ class OnvifBackend(Backend):
             msg_id = extract_message_id(data) or "uuid:?"
             reply = self._build_probe_match(msg_id)
             try:
-                sock.sendto(reply.encode("utf-8"), addr)
+                replies.sendto(reply.encode("utf-8"), addr)
                 print(f"[onvif] wsd replied to {addr}")
             except OSError as e:
                 print(f"[onvif] wsd send failed: {e}", file=sys.stderr)
