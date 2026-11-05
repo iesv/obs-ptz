@@ -22,14 +22,20 @@ def source(obs_world):
     """A source for a filter to be added to, removed at the end"""
     # the device kinds that stand in for another plugin's are the harness's
     obs_world.need_harness()
-    name = "third-party-cam"
-    obs_world.ws.call("CreateInput", {
-        "sceneName": obs_world.create_scene(),
+    # Source destruction can finish on a later render tick. Each fixture owns
+    # a distinct name so the next test cannot race that deferred cleanup.
+    scene = obs_world.create_scene()
+    name = f"third-party-cam-{scene}"
+    item = obs_world.ws.call("CreateInput", {
+        "sceneName": scene,
         "inputName": name,
         "inputKind": "color_source_v3",
         "inputSettings": {},
-    })
+    })["sceneItemId"]
     yield name
+    # An inactive scene need not render to prune a removed input. Release the
+    # item explicitly before removing the input, just as the source tests do.
+    obs_world.ws.call("RemoveSceneItem", {"sceneName": scene, "sceneItemId": item})
     try:
         obs_world.ws.call("RemoveInput", {"inputName": name})
     except ObsWebSocketError:
