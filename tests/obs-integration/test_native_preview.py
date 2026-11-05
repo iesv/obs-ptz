@@ -6,6 +6,7 @@ import platform
 import pytest
 from conftest import OBS_MAIN, SETTINGS_DIALOG
 from test_virtual_ptz import FILTER_KIND, move, thumbnail_image, wait_for_position
+from test_virtual_ptz import virtual_cam
 from uidriver import UiDriverError
 
 
@@ -73,3 +74,28 @@ def test_native_text_preview_after_preset_capture_and_surface_recreation(obs_wor
         obs_world.ui.invoke(SETTINGS_DIALOG, method="hide")
         obs_world.ws.call("RemoveInput", {"inputName": source})
         obs_world.ws.call("SetStudioModeEnabled", {"studioModeEnabled": was_studio})
+
+
+def test_a_hidden_native_preview_is_disabled(obs_world, virtual_cam):
+    """Check the native display switch, not just the source's showing count.
+
+    Keep the same selection across hide/show so the existing swap chain and
+    callback are reused. Rendering must resume without taking another source
+    reference or waiting for a device selection change.
+    """
+    path = [SETTINGS_DIALOG, "sourcePreview"]
+
+    def state():
+        return obs_world.ui.call("native_display", path=path, state=True)
+
+    obs_world.open_settings_dialog(virtual_cam)
+    try:
+        obs_world.wait_for(lambda: state()["exists"] and state()["enabled"])
+        for _ in range(3):
+            obs_world.ui.invoke(SETTINGS_DIALOG, method="hide")
+            assert not state()["visible"]
+            assert not state()["enabled"]
+            obs_world.open_settings_dialog(virtual_cam)
+            obs_world.wait_for(lambda: state()["visible"] and state()["enabled"])
+    finally:
+        obs_world.ui.invoke(SETTINGS_DIALOG, method="hide")

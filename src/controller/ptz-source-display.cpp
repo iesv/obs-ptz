@@ -21,8 +21,10 @@ PTZSourceDisplay::PTZSourceDisplay(QWidget *parent) : OBSQTDisplay(parent)
 	/* The display is made once the window is on screen, and again if it
 	 * moves to another screen, so each time it is made is when to say what
 	 * draws into it */
-	connect(this, &OBSQTDisplay::DisplayCreated, this,
-		[this]() { obs_display_add_draw_callback(GetDisplay(), draw, this); });
+	connect(this, &OBSQTDisplay::DisplayCreated, this, [this]() {
+		obs_display_add_draw_callback(GetDisplay(), draw, this);
+		obs_display_set_enabled(GetDisplay(), isVisible());
+	});
 }
 
 PTZSourceDisplay::~PTZSourceDisplay()
@@ -66,11 +68,17 @@ void PTZSourceDisplay::showEvent(QShowEvent *event)
 	syncNativeGeometry();
 	std::lock_guard<std::mutex> guard(m_lock);
 	holdShowingLocked();
+	if (GetDisplay())
+		obs_display_set_enabled(GetDisplay(), true);
 }
 
 void PTZSourceDisplay::hideEvent(QHideEvent *event)
 {
 	OBSQTDisplay::hideEvent(event);
+	/* Hiding a native window need not stop its OBS display on every backend.
+	 * Suspend its callback as well as releasing the source's showing hold. */
+	if (GetDisplay())
+		obs_display_set_enabled(GetDisplay(), false);
 	unwatchAncestors();
 	releaseShowing();
 }
