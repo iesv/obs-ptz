@@ -3,7 +3,8 @@ param(
     [ValidateSet('x64', 'arm64')]
     [string] $Target = 'x64',
     [ValidateSet('Debug', 'RelWithDebInfo', 'Release', 'MinSizeRel')]
-    [string] $Configuration = 'RelWithDebInfo'
+    [string] $Configuration = 'RelWithDebInfo',
+    [switch] $EnableTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,6 +49,11 @@ function Build {
     Ensure-Location $ProjectRoot
 
     $CmakeArgs = @('--preset', "windows-ci-${Target}")
+    if ( $EnableTests ) {
+        # Configure the production plugin and its non-installed test targets in
+        # one build, so integration tests load exactly the artifact checked here.
+        $CmakeArgs += @('-DENABLE_UI_TESTS=ON', '-DENABLE_VIRTUAL_PTZ_TESTS=ON', '-DENABLE_UNIT_TESTS=ON', '-DENABLE_USB_TESTS=ON')
+    }
 
     # CMakePresets.json pins the "Visual Studio 17 2022" generator. Runner
     # images that only ship VS 2026 (VisualStudioVersion 18.x, set by vcvars)

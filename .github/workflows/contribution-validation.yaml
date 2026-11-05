@@ -1,0 +1,104 @@
+name: Beta5 contribution validation
+on:
+  push:
+    branches: ['contrib/beta5-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  formatting:
+    uses: ./.github/workflows/check-format.yaml
+    with:
+      # A new branch's before SHA is zero. Compare against its real base,
+      # rather than treating the entire upstream repository as new code.
+      baseRef: b449abd9350a7b80df69029cc3b48f50a621abb0
+
+  platforms:
+    uses: ./.github/workflows/build-project.yaml
+    with:
+      validation: true
+
+  windows-regressions:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build production plugin and test targets
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x64
+          config: RelWithDebInfo
+          tests: 'true'
+      - name: Upload exact test binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta5-test-tools-${{ github.sha }}
+          path: |
+            build_x64/rundir/RelWithDebInfo/*.dll
+            release/RelWithDebInfo/obs-ptz/
+      - name: Run viewport, lifecycle and USB unit tests
+        run: |
+          $qt = Get-ChildItem .deps -Recurse -Filter Qt6Core.dll | Select-Object -First 1
+          if (!$qt) { throw 'Qt runtime not found' }
+          $env:PATH = "$($qt.Directory.FullName);$env:PATH"
+          & ./build_x64/tests/virtual-ptz/RelWithDebInfo/virtual-ptz-tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Virtual PTZ unit tests failed' }
+          & ./build_x64/tests/unit/RelWithDebInfo/ptz-unit-tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Core unit tests failed' }
+          & ./build_x64/tests/usb-backend/RelWithDebInfo/usb-backend-tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'USB unit tests failed' }
+      - name: Prepare isolated portable OBS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release download 32.0.4 --repo obsproject/obs-studio --pattern '*Windows*x64.zip' --dir obs-download
+          if ($LASTEXITCODE -ne 0) { throw 'OBS download failed' }
+          $archive = Get-ChildItem obs-download -Filter '*.zip' | Select-Object -First 1
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath obs-test
+          $binary = Get-ChildItem obs-test -Recurse -Filter obs64.exe | Select-Object -First 1
+          if (!$binary) { throw 'OBS executable not found' }
+          $root = $binary.Directory.Parent.Parent.FullName
+          $pluginBin = Join-Path $root 'obs-plugins/64bit'
+          $pluginData = Join-Path $root 'data/obs-plugins/obs-ptz'
+          New-Item -ItemType Directory -Force -Path $pluginBin, $pluginData | Out-Null
+          Copy-Item release/RelWithDebInfo/obs-ptz/bin/64bit/*.dll -Destination $pluginBin
+          Copy-Item release/RelWithDebInfo/obs-ptz/data/* -Destination $pluginData -Recurse
+          Copy-Item build_x64/rundir/RelWithDebInfo/obs-ui-driver.dll -Destination $pluginBin
+          Copy-Item build_x64/rundir/RelWithDebInfo/obs-ptz-ui-harness.dll -Destination $pluginBin
+          "PTZSIM_OBS_BINARY=$($binary.FullName)" >> $env:GITHUB_ENV
+          "PYTHONPATH=$((Join-Path $pwd 'scripts'))" >> $env:GITHUB_ENV
+          python -m pip install -r tests/obs-integration/requirements.txt
+      - name: Run complete OBS integration suite
+        run: |
+          New-Item -ItemType Directory -Force -Path work | Out-Null
+          python -m pytest tests/obs-integration -v --maxfail=3 --junitxml=release/beta5-tests.xml --basetemp=work/test-results
+          if ($LASTEXITCODE -ne 0) { throw 'OBS integration tests failed' }
+      - name: Run source, preset and transition stress tests
+        env:
+          PTZ_STRESS: '1'
+          PTZ_STRESS_CYCLES: '100'
+        run: |
+          python -m pytest tests/obs-integration/test_virtual_ptz_stress.py -v -s --maxfail=1 --junitxml=release/beta5-stress.xml --basetemp=work/stress-results
+          if ($LASTEXITCODE -ne 0) { throw 'Stress tests failed' }
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta5-test-diagnostics-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            release/beta5-*.xml
+            work/test-results/
+            work/stress-results/
+            obs-test/config/obs-studio/logs/
+            obs-test/config/obs-studio/crashes/

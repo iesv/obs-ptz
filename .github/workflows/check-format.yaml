@@ -1,6 +1,11 @@
 name: Check Code Formatting 🛠️
 on:
   workflow_call:
+    inputs:
+      baseRef:
+        description: Optional base for contribution-branch formatting checks
+        type: string
+        default: ''
 jobs:
   clang-format:
     runs-on: ubuntu-24.04
@@ -13,6 +18,7 @@ jobs:
         uses: ./.github/actions/run-clang-format
         with:
           failCondition: error
+          baseRef: ${{ inputs.baseRef }}
 
   gersemi:
     runs-on: ubuntu-24.04
@@ -25,6 +31,7 @@ jobs:
         uses: ./.github/actions/run-gersemi
         with:
           failCondition: error
+          baseRef: ${{ inputs.baseRef }}
 
   visca-profiles:
     runs-on: ubuntu-24.04

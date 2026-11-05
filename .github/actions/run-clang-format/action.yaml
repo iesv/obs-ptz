@@ -1,6 +1,9 @@
 name: Run clang-format
 description: Runs clang-format and checks for any changes introduced by it
 inputs:
+  baseRef:
+    description: Git reference to compare instead of the push event's before SHA
+    required: false
   failCondition:
     description: Controls whether failed checks also fail the workflow run
     required: false
@@ -26,6 +29,7 @@ runs:
       with:
         checkGlob: "'*.c' '*.h' '*.cpp' '*.hpp' '*.m' '*.mm' ':!shared/**'"
         diffFilter: 'ACM'
+        baseRef: ${{ inputs.baseRef }}
 
     - name: Install Dependencies 🛍️
       if: runner.os == 'Linux' && fromJSON(steps.checks.outputs.hasChangedFiles)
