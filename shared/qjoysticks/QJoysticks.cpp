@@ -21,13 +21,20 @@
  */
 
 #include <QDebug>
+#include <QCoreApplication>
 #include <QSettings>
 #include <QJoysticks.h>
 #include <QJoysticks/SDL_Joysticks.h>
 #include <QJoysticks/VirtualJoystick.h>
 
 QJoysticks::QJoysticks()
+   : QObject(qApp)
 {
+   /* SDL's Windows Gaming Input backend needs COM during shutdown. Release
+    * the singleton when Qt leaves its event loop, while the application's
+    * platform services still exist. QObject ownership also covers a startup
+    * that never reaches exec(); deleteLater removes it from that parent. */
+   connect(qApp, &QCoreApplication::aboutToQuit, this, &QObject::deleteLater);
    /* Initialize input methods */
    m_sdlJoysticks = new SDL_Joysticks(this);
    m_virtualJoystick = new VirtualJoystick(this);
@@ -67,8 +74,10 @@ QJoysticks::~QJoysticks()
  */
 QJoysticks *QJoysticks::getInstance()
 {
-   static QJoysticks joysticks;
-   return &joysticks;
+   /* A function-static object is destroyed during DLL/process teardown,
+    * after Windows Gaming Input has already lost its COM dependencies. */
+   static QJoysticks *joysticks = new QJoysticks;
+   return joysticks;
 }
 
 /**
