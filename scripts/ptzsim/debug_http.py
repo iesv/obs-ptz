@@ -74,6 +74,8 @@ class DebugHandler(BaseHTTPRequestHandler):
             "visca": dict(self.state.visca),
             "visca_syntax_errors": self.state.visca_syntax_errors,
             "visca_inquiries": list(self.state.visca_inquiries),
+            "onvif_requests": self.state.onvif_requests,
+            "onvif_invalid_nonce_encodings": self.state.onvif_invalid_nonce_encodings,
             # Counters of the VISCA-over-IP server's Sony quirks, if it has any
             "visca_udp_quirks": getattr(self.state, "visca_udp_stats", None),
             "presets": {

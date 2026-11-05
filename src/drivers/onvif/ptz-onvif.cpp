@@ -55,6 +55,9 @@ const QString nsWssSecext("http://docs.oasis-open.org/wss/2004/01/oasis-200401-w
 const QString nsWssUtility("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"); //wsu
 const QString nsWssPasswordDigest(
 	"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest");
+/* Nonce/EncodingType describes its bytes, not the password's digest algorithm. */
+const QString nsWssBase64Binary(
+	"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary");
 
 static void writeStartOnvifDocument(QXmlStreamWriter &s)
 {
@@ -102,7 +105,7 @@ void PTZOnvif::writeHeader(QXmlStreamWriter &s, const QString action = "")
 	s.writeCharacters(hashTokenBase64);
 	s.writeEndElement(); // Password
 	s.writeStartElement(nsWssSecext, "Nonce");
-	s.writeAttribute("EncodingType", nsWssPasswordDigest);
+	s.writeAttribute("EncodingType", nsWssBase64Binary);
 	s.writeCharacters(nonce64);
 	s.writeEndElement(); // Nonce
 	s.writeTextElement(nsWssUtility, "Created", timestamp);

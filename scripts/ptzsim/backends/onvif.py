@@ -133,6 +133,19 @@ class OnvifHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
+        # Inspect bytes received from the real plugin. Permissive authentication
+        # must not conceal a malformed Nonce/EncodingType in protocol tests.
+        invalid_nonce = False
+        try:
+            nonce = ET.fromstring(body).find(f'.//{{{NS["wsse"]}}}Nonce')
+            encoding = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary"
+            invalid_nonce = nonce is not None and nonce.get("EncodingType", encoding) != encoding
+        except ET.ParseError:
+            pass
+        with self.backend.state._lock:
+            # Each SOAP request runs on its own HTTP thread.
+            self.backend.state.onvif_requests += 1
+            self.backend.state.onvif_invalid_nonce_encodings += int(invalid_nonce)
         action, op = parse_soap_action(body)
         print(f"[onvif] {self.path} -> {op}")
         response = self.dispatch(op, body)

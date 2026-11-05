@@ -88,6 +88,8 @@ class PTZState:
         # first. Only the first INQUIRY_LOG_MAX, as a camera is asked
         # forever.
         self.visca_inquiries = []
+        self.onvif_requests = 0
+        self.onvif_invalid_nonce_encodings = 0
         # Where each axis is heading after an absolute move, and how fast
         # it gets there in normalized units per second (0: it jumps)
         self.move_rate = 0.0
