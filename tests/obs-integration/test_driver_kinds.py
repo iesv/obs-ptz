@@ -17,11 +17,13 @@ enabled, as scripts/macos-dev.sh makes one.
 import itertools
 import os
 import time
-import tty
 
 import pytest
 from conftest import IS_WINDOWS
 from obsws import ObsWebSocketError
+
+if not IS_WINDOWS:
+    import tty
 
 PREFIX = "ca.secretlab.obs-ptz."
 KINDS = {PREFIX + name for name in ("visca", "onvif", "pelco", "usb-cam", "virtual-ptz")}

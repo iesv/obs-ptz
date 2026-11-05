@@ -8,11 +8,13 @@ import socket
 import subprocess
 import threading
 import time
-import tty
 
 import pytest
 
 from conftest import IS_WINDOWS
+
+if not IS_WINDOWS:
+    import tty
 
 VISCA_FILTER = "ca.secretlab.obs-ptz.visca"
 SOURCE = "visca-transport-cam"
